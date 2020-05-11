@@ -2,7 +2,7 @@ all: Image
 
 .PHONY=clean run-qemu
 
-run-qemu: bootsect
+run-qemu: Image
 	qemu-system-i386 -boot a -fda Image
 
 bootsect.o: bootsect.s
@@ -12,17 +12,17 @@ bootsect: bootsect.o ld-bootsect.ld
 	ld -T ld-bootsect.ld bootsect.o -o bootsect
 	objcopy -O binary -j .text bootsect 			# 删除头部多余信息
 
-Image: bootsect demo
+Image: bootsect setup
 	dd if=bootsect of=Image bs=512 count=1
-	dd if=demo of=Image bs=512 count=4 seek=1
+	dd if=setup of=Image bs=512 count=4 seek=1
 	
-demo.o: demo.s
-	as --32 demo.s -o demo.o
+setup.o: setup.s
+	as --32 setup.s -o setup.o
 
-demo: demo.o ld-bootsect.ld
-	ld -T ld-bootsect.ld demo.o -o demo
-	objcopy -O binary -j .text demo 			# 删除头部多余信息
+setup: setup.o ld-bootsect.ld
+	ld -T ld-bootsect.ld setup.o -o setup
+	objcopy -O binary -j .text setup 			# 删除头部多余信息
 
 clean:
 	rm -f *.o *.out
-	rm -f bootsect
+	rm -f bootsect setup Image

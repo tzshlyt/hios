@@ -3,7 +3,7 @@
 .text
 
 .equ DEMOSEG, 0x1020
-.equ LEN, 49 
+.equ LEN, 50 
 
 show_text:
     mov $DEMOSEG, %ax

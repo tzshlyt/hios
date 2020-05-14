@@ -1,28 +1,30 @@
-all: Image
+# $@ = target file
+# $< = first dependency
+# $^ = all dependencies
 
-.PHONY=clean run-qemu
+AS=as
+LD=ld
 
-run-qemu: Image
+.PRECIOUS: %.o 		# 保留.o文件
+
+Image: bootsect.bin setup.bin binary.bin
+	dd if=bootsect.bin of=Image bs=512 count=1
+	dd if=setup.bin of=Image bs=512 count=4 seek=1
+	dd if=binary.bin of=Image bs=512 seek=5
+	
+.s.o:
+	$(AS) --32 $< -o $@
+
+%.bin: %.o
+	$(LD) -T ld-bootsect.ld $< -o $@
+	objcopy -O binary -j .text $@		# 删除头部多余信息
+
+run: Image
 	qemu-system-i386 -boot a -fda Image
 
-bootsect.o: bootsect.s
-	as --32 bootsect.s -o bootsect.o
-
-bootsect: bootsect.o ld-bootsect.ld
-	ld -T ld-bootsect.ld bootsect.o -o bootsect
-	objcopy -O binary -j .text bootsect 			# 删除头部多余信息
-
-Image: bootsect setup
-	dd if=bootsect of=Image bs=512 count=1
-	dd if=setup of=Image bs=512 count=4 seek=1
-	
-setup.o: setup.s
-	as --32 setup.s -o setup.o
-
-setup: setup.o ld-bootsect.ld
-	ld -T ld-bootsect.ld setup.o -o setup
-	objcopy -O binary -j .text setup 			# 删除头部多余信息
+run-bochs: Image
+	bochs -q
 
 clean:
-	rm -f *.o *.out
-	rm -f bootsect setup Image
+	rm -f *.o *.out *.bin
+	rm -f Image

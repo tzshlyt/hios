@@ -1,5 +1,4 @@
 
 *.o
-bootsect
-setup
+*.bin
 Image

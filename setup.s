@@ -176,6 +176,7 @@ end_move:
 	mov $SETUPSEG, %ax
 	mov %ax, %ds        # ds 指向本程序 setup.s
 	lgdt gdt_48
+    lidt idt_48
 
 
 # 开启A20地址线，
@@ -186,6 +187,34 @@ end_move:
 	orb $0b00000010, %al
 	outb %al, $0x92
 
+# 这里我们会对8259A进行编程
+	mov $0x11, %al			# Init ICW1, 0x11 is init command
+
+	out %al, $0x20			# 0x20 is 8259A-1 Port
+	.word 0x00eb, 0x00eb	# Time Delay jmp $+2, jmp $+2
+	out %al, $0xA0			# And init 8259A-2
+	.word 0x00eb, 0x00eb
+	mov $0x20, %al			# Send Hardware start intterupt number(0x20)
+	out %al, $0x21			# From 0x20 - 0x27
+	.word 0x00eb, 0x00eb
+	mov $0x28, %al
+	out %al, $0xA1			# From 0x28 - 0x2F
+	.word 0x00eb, 0x00eb
+	mov $0x04, %al			# 8259A-1 Set to Master
+	out %al, $0x21
+	.word 0x00eb, 0x00eb
+	mov $0x02, %al			# 8259A-2 Set to Slave
+	out %al, $0xA1
+	.word 0x00eb, 0x00eb
+	mov $0x01, %al			# 8086 Mode
+	out %al, $0x21
+	.word 0x00eb, 0x00eb
+	out %al, $0xA1
+	.word 0x00eb, 0x00eb
+	mov $0xFF, %al
+	out %al, $0x21			# Mask all the interrupts now
+	.word 0x00eb, 0x00eb
+	out %al, $0xA1
 
 # 开启保护模式！
 	mov %cr0, %eax
@@ -224,16 +253,16 @@ gdt:
 	.word	0x9200          # 1 00 1 0010 0x00，数据段为可读可写
 	.word	0x00C0          
 
-idt:
-    .word 0
-    .word 0, 0
+idt_48:
+    # 先设置一个空表
+    .word 0                 # limit = 0
+    .word 0, 0              # base = 0L
 
 msg:
     .byte 13, 10
     .ascii "You've successfully load the floppy into RAM"
     .byte 13, 10, 13, 10
     
-
 .text
 endtext:
 .data

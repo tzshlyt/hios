@@ -2,8 +2,8 @@
 # $< = first dependency
 # $^ = all dependencies
 
-AS=as
-LD=ld
+
+LDFLAGS += -Ttext 0
 
 .PRECIOUS: %.o 		# 保留.o文件
 
@@ -13,10 +13,10 @@ Image: boot/bootsect.bin boot/setup.bin boot/binary.bin
 	dd if=boot/binary.bin of=Image bs=512 seek=5
 	
 .s.o:
-	$(AS) --32 $< -o $@
+	$(AS) $< -o $@ 
 
 %.bin: %.o
-	$(LD) -T boot/ld-bootsect.ld $< -o $@
+	$(LD) $(LDFLAGS) $< -o $@
 	objcopy -O binary -j .text $@		# 删除头部多余信息
 
 run: Image

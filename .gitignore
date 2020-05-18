@@ -1,4 +1,11 @@
 
 *.o
 *.bin
+*.sym
+
 Image
+system
+boot/setup
+
+
+

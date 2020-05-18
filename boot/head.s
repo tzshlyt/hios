@@ -5,7 +5,7 @@
 .globl idt, gdt, pg_dir, tmp_floppy_area
 pg_dir:             # 页目录将会保存在这里，最后会覆盖掉startup_32内容
 
-
+.globl startup_32
 #   段选择符格式:
 #        15              3    2     0
 #        ----------------------------
@@ -135,6 +135,7 @@ after_page_tables:
 	push $0                 # argc 
 	pushl $L6               # 压入返回地址
 	pushl $main            # 压入main() 函数代码地址
+    jmp setup_paging
 L6:
 	jmp L6                  # main() 不应该返回
 

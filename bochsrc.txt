@@ -1,3 +1,4 @@
 floppya: 1_44="./Image", status=inserted
+megs: 16
 boot: floppy
 display_library: x, options="gui_debug"

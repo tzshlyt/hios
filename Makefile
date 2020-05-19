@@ -36,13 +36,15 @@ Image: boot/bootsect boot/setup system
 	@echo "Build bootimg done"
 
 run: Image
-	qemu-system-i386 -boot a -fda Image
+	qemu-system-i386 -m 16M -boot a -fda Image
 
 run-bochs: Image
 	bochs -q
 
-run_debug:
-	qemu-system-i386 -boot a -fda Image -S -s
+run-debug:
+	qemu-system-i386 -m 16M -boot a -fda Image -S -s &
+	gdb -ex "target remote :1234" -ex "symbol-file system.sym" 
+	
 
 clean:
 	rm -f *.o *.sym 

@@ -1,8 +1,11 @@
 
+#include <linux/kernel.h>
+#include <stdarg.h>
+
 void main() {
-    int a = 0;
-    int b = 1;
-    int c = a + b;
-    printk("%d", c);
+    video_init(); 
+    printk("Welcome to Linux0.11 Kernel Mode(NO)\n");
+    printk(" Hello world \n"); 
+
     while(1);
 }

@@ -1,19 +1,20 @@
+include Makefile.header
 
 # $@ = target file
 # $< = first dependency
 # $^ = all dependencies
-
-include Makefile.header
 
 LDFLAGS += -Ttext 0 
 
 .PHONY=clean run all
 .PRECIOUS: %.o 		# 保留.o文件
 
+OBJS = boot/head.o init/main.o kernel/kernel.o mm/mm.o
+
 all: Image
 
-system: boot/head.o kernel/kernel.o
-	$(LD) $(LDFLAGS) boot/head.o kernel/kernel.o -o system.sym
+system: $(OBJS)
+	$(LD) $(LDFLAGS) $(OBJS) -o system.sym
 	strip system.sym -o system.o
 	objcopy -O binary -R .note -R .comment system.o	system 		# 删除头部多余信息
 
@@ -29,6 +30,12 @@ boot/bootsect:
 boot/setup:
 	make setup -C boot
 
+init/main.o:
+	make main.o -C init
+
+mm/mm.o:
+	make -C mm
+
 Image: boot/bootsect boot/setup system 
 	dd if=boot/bootsect of=Image bs=512 count=1
 	dd if=boot/setup of=Image bs=512 count=4 seek=1
@@ -41,7 +48,7 @@ run: Image
 run-bochs: Image
 	bochs -q
 
-run-debug:
+debug:
 	qemu-system-i386 -m 16M -boot a -fda Image -S -s &
 	gdb -ex "target remote :1234" -ex "symbol-file system.sym" 
 	
@@ -51,3 +58,6 @@ clean:
 	rm -f Image
 	make clean -C boot
 	make clean -C kernel
+	make clean -C mm
+	make clean -C init
+

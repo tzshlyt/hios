@@ -3,7 +3,7 @@ include ../Makefile.header
 LDFLAGS += -r
 CFLAGS += -I../include
 
-OBJS = printk.o panic.o
+OBJS = printk.o panic.o traps.o asm.o
 
 all: kernel.o
 	

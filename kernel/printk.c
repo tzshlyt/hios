@@ -1,4 +1,5 @@
 #include <linux/kernel.h>
+#include <linux/mm.h>
 #include <asm/io.h>
 #include <stdarg.h>
 
@@ -18,13 +19,6 @@
 /* 屏幕设备 I/O ports */
 #define REG_SCREEN_CTRL 0x3D4
 #define REG_SCREEN_DATA 0x3D5
-
-long user_stack[PAGE_SIZE>>2];
-
-struct {
-    long *a;
-    short b;
-} stack_start = { &user_stack[PAGE_SIZE>>2], 0x10 };
 
 struct video_info {
     unsigned int retval;        // Return value

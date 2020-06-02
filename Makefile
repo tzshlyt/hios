@@ -4,7 +4,7 @@ include Makefile.header
 # $< = first dependency
 # $^ = all dependencies
 
-LDFLAGS += -Ttext 0 
+LDFLAGS += -Ttext 0 -e startup_32
 
 .PHONY=clean run all
 .PRECIOUS: %.o 		# 保留.o文件

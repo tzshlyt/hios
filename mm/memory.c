@@ -177,6 +177,64 @@ int free_page_tables(unsigned long from, unsigned long size) {
     return 0;
 }
 
+// 复制页目录表项和页表项
+// 此时原物理内存区将被共享，此后两个进程（父进程和其子进程）将共享内存区,
+// 直到有一个进程执行写操作时，内核才会为写操作进程分配新的内存页（写时复制机制）
+// from , to 线性地址
+// size - 需要复制（共享）的内存长度，单位是字节
+int copy_page_tables(unsigned long from, unsigned long to, long size) {
+    unsigned long * from_page_table;
+    unsigned long * to_page_table;
+    unsigned long this_page;
+    unsigned long * from_dir, * to_dir;
+    unsigned long nr;
+
+    // 4MB 内存边界对齐
+    if ((from & 0x3fffff) || (to & 0x3fffff)) {
+        panic("copy_page_tables called with wrong alignment");
+    }
+
+    from_dir = (unsigned long *) ((from >> 20) & 0xffc);
+    to_dir = (unsigned long *) ((to >> 20) & 0xffc);
+    size = ((unsigned)(size + 0x3fffff)) >> 22;
+
+    for (; size-- > 0; from_dir++, to_dir++)  {
+        // 若目的目录项指定的页表已经存在，则出错死机
+        if (1 & *to_dir) {
+            panic("copy_page_tables: already exist");
+        }
+        // 若源目录项无效，继续处理下一个
+        if (!(1 & *from_dir)) {
+            continue;
+        }
+
+        // 取空闲页面保存目的目录项对应的页表
+        from_page_table = (unsigned long *)(0xfffff00 & *from_dir);
+        if (!(to_page_table = (unsigned long *)get_free_page())) {
+            return -1;
+        }
+
+        *to_dir = ((unsigned long) to_page_table) | 7;      // 设置标志
+        nr = (from == 0) ? 0xA0 : 1024;                     // 若内核空间，则仅需复制头160页（640KB）
+        for (; nr-- > 0; from_page_table++, to_page_table++) {
+            this_page = *from_page_table;
+            if (!(1 & this_page))               // 当前源页面没有使用，则不用复制
+                continue;
+            this_page &= ~2;                    // 置为可读
+            *to_page_table = this_page;
+
+            if(this_page > LOW_MEM) {           // 主内存中
+                *from_page_table = this_page;   // 令源页表项也只读
+                mem_map[MAP_NR(this_page)]++;
+            }
+        }
+    }
+
+    invalidate();
+    return 0;
+}
+
+
 // 把一物理内存页映射到线性地址空间
 // 在处理缺页异常 do_no_page() 中会调此函数 
 // page - 分配的主内存中某一页（页帧，页框）的指针
@@ -302,6 +360,7 @@ void do_no_page(unsigned long error_code, unsigned long address) {
     unsigned long tmp;
     unsigned long page;
 
+    printk("Page Fault at [%x]\n", address);
     address &= 0xfffff000;
     if (!(page = get_free_page()))
         oom();

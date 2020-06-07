@@ -7,6 +7,8 @@
 #include <asm/system.h>
 #include <asm/io.h>
 
+extern int timer_interrupt(void);
+
 // 每个进程在内核状态运行时都有自己的内核态堆栈
 union task_union {
     struct task_struct task;    // 因为一个任务的数据结构与其内核态堆栈在同一内存页中，所以从堆栈段寄存器ss可以获得其数据段选择符
@@ -59,29 +61,25 @@ int sys_pause(void) {
 // 对于一个进程由于执行时间片用完时，则进行任务切换，并执行一个计时更新工作
 int counter = 0;
 void do_timer(long cpl) {
-    jiffies++;
     counter++;
     if(counter == 10){
-        printk("Jiffies = %d\n", jiffies);
+        printk("CPL = %d Jiffies = %d\n", cpl, jiffies);
         counter = 0;
     }
-    outb(0x20, 0x20);
-    // clear the interrup
 }
 
-
-void demo_timer_interrupt(void);
+void timer_interrupt(void);
 
 // 这是一个临时函数，用于初始化8253计时器
 // 并开启时钟中断
-void timer_init() {
+void sched_init() {
     int divisor = 1193180/HZ;
     outb_p(0x36, 0x43);
     outb_p(divisor & 0xFF, 0x40);
     outb_p(divisor >> 8, 0x40);
 
     // timer interrupt gate setup: INT 0x20
-    set_intr_gate(0x20, &demo_timer_interrupt);
+    set_intr_gate(0x20, &timer_interrupt);
     // Make 8259 accept timer interrupt
     outb(inb_p(0x21) & ~0x01, 0x21);
 }

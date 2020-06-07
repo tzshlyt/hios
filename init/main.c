@@ -8,7 +8,7 @@ void main() {
     int ret;
     video_init(); 
     trap_init();
-    timer_init();
+    sched_init();
     printk("Welcome to Linux0.11 Kernel Mode(NO)\n");
 
     // 初始化物理页内存, 将 1MB - 16MB 地址空间的内存进行初始

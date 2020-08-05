@@ -68,8 +68,6 @@ void do_timer(long cpl) {
     }
 }
 
-void timer_interrupt(void);
-
 // 这是一个临时函数，用于初始化8253计时器
 // 并开启时钟中断
 void sched_init() {

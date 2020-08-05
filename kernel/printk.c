@@ -50,13 +50,13 @@ int video_gety() {
 }
 
 void update_cursor(int row, int col) {
-   unsigned int pos = (row * VIDEO_X_SZ) + col;
-   // LOW Cursor port to VGA Index Registe
-   outb(0x0f, REG_SCREEN_CTRL);
-   outb((unsigned char)(pos & 0xff), REG_SCREEN_DATA);
-   // High Cursor port to VGA Index Registe
-   outb(0x0e, REG_SCREEN_CTRL);
-   outb((unsigned char)((pos >> 8) & 0xff), REG_SCREEN_DATA);
+    unsigned int pos = (row * VIDEO_X_SZ) + col;
+    // LOW Cursor port to VGA Index Registe
+    outb(0x0f, REG_SCREEN_CTRL);
+    outb((unsigned char)(pos & 0xff), REG_SCREEN_DATA);
+    // High Cursor port to VGA Index Registe
+    outb(0x0e, REG_SCREEN_CTRL);
+    outb((unsigned char)((pos >> 8) & 0xff), REG_SCREEN_DATA);
 }
 
 int get_cursor() {

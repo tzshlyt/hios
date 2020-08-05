@@ -1,4 +1,4 @@
-/** 
+/**
  * 实现系统调用过程
  * 使用中断调用 int 0x80 和放在 eax 中的功能号来使用内核提供各种功能服务
  *
@@ -60,7 +60,7 @@ timer_interrupt:
 	incl jiffies
 	movb $0x20, %al         # 由于初始化中断芯片时没有采用自动EOI，所以这里需要发指令结束该硬件中断
 	outb %al, $0x20
-	movl CS(%esp), %eax		# 从栈中取出执行系统调用代码的选择符（cs段寄存器值）中的当前特权级别（0或3）并压入堆栈, 作为do_timer的参数， 
+	movl CS(%esp), %eax		# 从栈中取出执行系统调用代码的选择符（cs段寄存器值）中的当前特权级别（0或3）并压入堆栈, 作为do_timer的参数，
 	andl $3, %eax			# do_timer() 函数执行任务切换、计时等工作，在kernel/sched.c
 	pushl %eax
 	call do_timer

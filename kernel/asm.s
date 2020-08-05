@@ -13,9 +13,9 @@
 divide_error:
     pushl $do_divide_error         # 把调用的函数地址压栈
 no_error_code:                      # 无出错号处理的入口
-    xchgl %eax, (%esp)              # _do_divide_error -> eax, eax 被交换入栈 
+    xchgl %eax, (%esp)              # _do_divide_error -> eax, eax 被交换入栈
     pushl %ebx
-    pushl %ecx 
+    pushl %ecx
     pushl %edx
     pushl %edi
     pushl %esi
@@ -43,7 +43,7 @@ no_error_code:                      # 无出错号处理的入口
     popl %ebx
     popl %eax
     iret
-    
+
 
 # int1 debug 调试中断入口点 类型 Fault
 debug:
@@ -144,7 +144,7 @@ invalid_TSS:
 	pushl $do_invalid_TSS
 	jmp error_code
 
-# int11 段不存在 类型 Fault 
+# int11 段不存在 类型 Fault
 segment_not_present:
 	pushl $do_segment_not_present
 	jmp error_code

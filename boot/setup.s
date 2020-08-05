@@ -5,7 +5,7 @@
 .equ SETUPSEG,  0x9020
 .equ INITSEG,   0x9000
 .equ SYSSEG,    0x1000
-.equ LEN, 50 
+.equ LEN, 50
 
 .globl _start
 .globl begtext, begdata, begbass, endtext, enddta, endbss
@@ -99,7 +99,7 @@ _start:
 # 复制硬盘参数表信息
 # 比较奇怪的是硬盘参数表存在中断向量里
 # 第一个硬盘参数表的首地址在0x41中断向量处，
-# 第二个参数的首地址表在0x46中断向量处，紧跟着第一个参数表, 
+# 第二个参数的首地址表在0x46中断向量处，紧跟着第一个参数表,
 # 每个参数表长度为0x10 Byte
 
 # 第一块硬盘参数表
@@ -233,25 +233,25 @@ end_move:
 # GDTR 信息
 gdt_48:
     # 这里全局表长度社着为 2KB （0x7ff）即可，因为每个描述符 8 字节
-    # 所以表中共可有 256 项					
-	.word 0x800	            # gdt 表限长，2kB		 
-	.word 512+gdt, 0x9	    # gdt 表基地址，0x0009 << 16 + 0x0200 + gdt
+    # 所以表中共可有 256 项
+	.word 0x800	            # gdt 表限长，2kB
+	.word 512+gdt, 0x9	    # gdt 表基地址，0x0009 << 16 + 0x0200 + gdt, 等于0x90200 + gdt
 
 gdt:
     # offset 0x0
 	.word	0,0,0,0
     # offset 0x08 代码段
     # 代码段的限长是 8MB = (0x7ff + 1) * 4KB = 2KB * 4KB
-    # 这里加 1 是因为限长是从 0 开始算起的 
+    # 这里加 1 是因为限长是从 0 开始算起的
 	.word	0x07FF          # 段限长 15-0
 	.word	0x0000          # 基地址 15-0
 	.word	0x9A00          # 1 00 1 1010 0x00 , 代码段为只读、可执行
 	.word	0x00C0          # 0x00 1100 0000
-    # offset 0x10 数据段 
+    # offset 0x10 数据段
 	.word	0x07FF
 	.word	0x0000
 	.word	0x9200          # 1 00 1 0010 0x00，数据段为可读可写
-	.word	0x00C0          
+	.word	0x00C0
 
 idt_48:
     # 先设置一个空表
@@ -262,7 +262,7 @@ msg:
     .byte 13, 10
     .ascii "You've successfully load the floppy into RAM"
     .byte 13, 10, 13, 10
-    
+
 .text
 endtext:
 .data

@@ -6,7 +6,7 @@ int mmtest_main(void);
 
 void main() {
     int ret;
-    video_init(); 
+    video_init();
     trap_init();
     sched_init();
     printk("Welcome to Linux0.11 Kernel Mode(NO)\n");

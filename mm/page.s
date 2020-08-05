@@ -10,11 +10,11 @@ page_fault:
     pushl %ds
     pushl %es
     pushl %fs
-   
+
     movl $0x10, %edx            # 置内核数据段选择符
     mov %dx, %ds
-    mov %dx, %es  
-    mov %dx, %fs  
+    mov %dx, %es
+    mov %dx, %fs
     movl %cr2, %edx             # 取引起页面异常的线性地址
     pushl %edx                  # 将该线性地址和出错码压入栈中，作为将调用函数的参数
     pushl %eax
@@ -31,4 +31,4 @@ page_fault:
     pop %edx
     pop %ecx
     pop %eax
-    iret 
+    iret

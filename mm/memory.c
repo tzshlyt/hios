@@ -236,7 +236,7 @@ int copy_page_tables(unsigned long from, unsigned long to, long size) {
 
 
 // 把一物理内存页映射到线性地址空间
-// 在处理缺页异常 do_no_page() 中会调此函数 
+// 在处理缺页异常 do_no_page() 中会调此函数
 // page - 分配的主内存中某一页（页帧，页框）的指针
 // address - 线性地址
 unsigned long put_page(unsigned long page, unsigned long address) {
@@ -278,7 +278,7 @@ unsigned long put_page(unsigned long page, unsigned long address) {
 
 
 // 获取一页物理内存并将其映射到指定的线性地址处
-// address - 线性地址 
+// address - 线性地址
 void get_empty_page(unsigned long address) {
     unsigned long tmp;
     if (!(tmp = get_free_page()) || !put_page(tmp, address)) {
@@ -360,7 +360,7 @@ void do_no_page(unsigned long error_code, unsigned long address) {
     unsigned long tmp;
     unsigned long page;
 
-    printk("Page Fault at [%x]\n", address);
+    printk("Page Fault at [%x], errono %d\n", address, error_code);
     address &= 0xfffff000;
     if (!(page = get_free_page()))
         oom();

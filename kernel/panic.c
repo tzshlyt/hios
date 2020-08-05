@@ -1,6 +1,6 @@
 /*
  * Use for trigger a kernel panic
- * When panic, it will print out a message and then 
+ * When panic, it will print out a message and then
  * dead, use for alerting a major problem
  */
 #define PANIC

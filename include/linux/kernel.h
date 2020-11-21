@@ -1,6 +1,6 @@
 #ifndef _KERNEL_H
 #define _KERNEL_H
-
+ 
 void printk(char *fmt, ...);     // Simplest printk function to use
 void video_putchar_at(char ch, int x, int y, char attr);
 void video_putchar(char ch);

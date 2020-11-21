@@ -1,7 +1,6 @@
 .code32
 
-.global _start
-.global begtext, begdata, begbss
+.global _start, begtext, begdata, begbss
 
 _start:
 	# Just have a try to move one char in the memory

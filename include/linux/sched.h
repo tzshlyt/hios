@@ -31,6 +31,9 @@
 
 extern int copy_page_tables(unsigned long from, unsigned long to, unsigned long size);
 extern int free_page_tables(unsigned long from, unsigned long size);
+extern void schedule(void);
+
+typedef int (*fn_ptr)();
 
 // 数学协处理器使用的结构，主要用于保存进程切换时i387的执行状态信息
 struct i387_struct {
@@ -46,13 +49,13 @@ struct i387_struct {
 
 // 任务状态段数据结构，注意变量顺序，参考Intel手册
 struct tss_struct {
-    long back_link;
+    long back_link;                     /* 16 high bits zero */
     long esp0;
-    long ss0;
+    long ss0;                           /* 16 high bits zero */
     long esp1;
-    long ss1;
+    long ss1;                           /* 16 high bits zero */
     long esp2;
-    long ss2;
+    long ss2;                           /* 16 high bits zero */
     long cr3;
     long eip;
     long eflags;
@@ -61,37 +64,41 @@ struct tss_struct {
     long ebp;
     long esi;
     long edi;
-    long es;
-    long cs;
-    long ss;
-    long ds;
-    long fs;
-    long gs;
-    long ldt;
-    long bitmap;
-    struct i387_struct i387;
+    long es;                            /* 16 high bits zero */
+    long cs;                            /* 16 high bits zero */
+    long ss;                            /* 16 high bits zero */
+    long ds;                            /* 16 high bits zero */
+    long fs;                            /* 16 high bits zero */
+    long gs;                            /* 16 high bits zero */
+    unsigned long ldt;                  /* 16 high bits zero */
+    unsigned long trace_bitmap;         /* 16 high bits zero */
+    struct i387_struct i387;            /* 16 high bits zero */
 };
 
 // 进程描述符
 struct task_struct {
+	// --- 硬编码部分，下面的不应该修改 ---
     long state;                         // 运行状态 -1 不可运行，0 可运行（就绪）, >0 已停止
     long counter;                       // 运行时间计数（递减），运行时间片
     long priority;                      // 优先级，开始运行时 counter = priority，越大运行越长
+
     long signal;                        // 信号，是位图，每个比特代表一种信号，信号值=位偏移值+1
     struct sigaction sigaction[32];     // 信号执行属性结构，对应信号将要执行的操作和标志信息
     long blocked;                       // 进程信号屏蔽码（对应信号位图）
-
+	// --- 硬编码部分结束 ---
     int exit_code;                      // 退出码，其父进程会取
     unsigned long start_code;           // 代码段地址
     unsigned long end_code;             // 代码长度（字节数）
     unsigned long end_data;             // 代码长度 + 数据长度（字节数）
     unsigned long brk;                  // 总长度
     unsigned long start_stack;          // 堆栈段地址
+
     long pid;                           // 进程号
     long father;                        // 父进程号
     long pgrp;                          // 进程组号
-    long session;                       // 会话号
-    long leader;                        // 会话首领
+    long session;                       // 会话(session)ID
+    long leader;                        // 会话(session)的首领
+
     unsigned short uid;                 // 用户id
     unsigned short euid;                // 有效用户id
     unsigned short suid;                // 保存的用户id
@@ -99,15 +106,16 @@ struct task_struct {
     unsigned short egid;                // 有效组id
     unsigned short sgid;                // 保存组id
 
-    long alarm;                         // 报警定时值（滴答数）
+    long alarm;                         // 报警定时值（滴答数）单位：jiffies
     long utime;                         // 用户态运行时间（滴答数）
-    long stime;                         // 系统态运行时间（滴答数）
+    long stime;                         // 内核态运行时间（滴答数）
     long cutime;                        // 子进程用户态运行时间
-    long cstime;                        // 子进程系统态运行时间
+    long cstime;                        // 子进程内核态运行时间
     long start_time;                    // 进程开始运行时刻
+
     unsigned short used_math;           // 标志：是否使用了协处理器
 
-    int tty;                            // 进程使用tty的子设备号。-1 表示没有使用
+    // int tty;                            // 进程使用tty的子设备号。-1 表示没有使用
     // 下面是和文件系统相关的变量，暂时不使用，先注释
     //unsigned short umask;               // 文件创建属性屏蔽位
     //struct m_inode * pwd;               // 当前工作目录i节点结构
@@ -121,6 +129,7 @@ struct task_struct {
 
 // 设置第1个任务表
 // 基址Base = 0, 段长limit = 0x9ffff（640KB）
+// 因为 G 设置 1, limit = 0x9ffff / 4KB = 0x9ffff >> 12 = 0x9f
 #define INIT_TASK \
 /* state info */ {0, 15, 15, \
 /* signals */    0, {{}, }, 0, \
@@ -131,8 +140,8 @@ struct task_struct {
 /* math */    0, \
 /* LDT */    { \
         {0, 0},\
-        {0x9f, 0xc0fa00}, \
-        {0x9f, 0xc0f200}, \
+        {0x9f, 0xc0fa00},  /* 代码长640k, 基地址 0x0, G=1, D=1, DPL=3, P=1 TYPE=0x0a */ \
+        {0x9f, 0xc0f200},  /* 数据长640k, 基地址 0x0, G=1, D=1, DPL=3, P=1 TYPE=0x0a */ \
     }, \
 /* TSS */ {0, PAGE_SIZE+(long)&init_task, 0x10, 0, 0, 0, 0, (long)&pg_dir, \
         0, 0, 0, 0, 0, 0, 0, 0, \
@@ -154,6 +163,7 @@ extern void add_timer(long *jiffies, void(*fn)(void));          // 添加定时�
 extern void sleep_on(struct task_struct **p);                   // 不可中断的等待睡眠，kernel/sched.c
 extern void interruptible_sleep_on(struct task_struct **p);     // 可中断的等待睡眠
 extern void wake_up(struct task_struct **p);                    // 明确唤醒睡眠的进程
+extern void show_task_info(struct task_struct *task);
 
 /*
  * 在GDT表中寻找第1个TSS的入口。0 没有用nul，1 代码段cs，2 数据段ds，3 系统调用syscall
@@ -162,16 +172,17 @@ extern void wake_up(struct task_struct **p);                    // 明确唤醒�
 // 全局表中第1个任务状态段（TSS）描述符的选择符索引号
 #define FIRST_TSS_ENTRY 4
 #define FIRST_LDT_ENTRY (FIRST_TSS_ENTRY+1)
-// 下面计算出TSS，LDT在GDT中的偏移量
-// _TSS(n)表示第n个TSS，计算方式为，第一个 TSS 的入口为 4 << 3(因为每一个Entry占8Byte, 所以第4个的偏移量为4 << 3)
+// 计算出TSS，LDT在 GDT 中的选择符值 (偏移量，即第几个字节)
+// _TSS(n)表示第n个TSS，计算方式为，第一个 TSS 的入口为 FIRST_TSS_ENTRY << 3(因为每一个Entry占8字节, 所以第4个的偏移量为4 << 3 = (4 * 8))
+// 因为每个任务使用 1 个 TSS 和 1 个 LDT 描述符，共占用 16 字节，因此需要 n << 4 来表示对应 TSS 起始位置
 #define _TSS(n) ((((unsigned long) n) << 4) + (FIRST_TSS_ENTRY << 3))
 #define _LDT(n) ((((unsigned long) n) << 4) + (FIRST_LDT_ENTRY << 3))
-#define ltr(n) __asm__("ltr %%ax"::"a", (_TSS(n)))
-#define lldt(n) __asm__("lldt %%ax"::"a", (_LDT(n)))
+#define ltr(n) __asm__ volatile("ltr %%ax"::"a" (_TSS(n)))
+#define lldt(n) __asm__ volatile("lldt %%ax"::"a" (_LDT(n)))
 
 // 取出当前的任务号，是任务数组中的索引值，和进程号 pid 不同
 #define str(n) \
-__asm__("str %%ax\n\t" /* 将任务寄存器中TSS段的选择符复制到ax中 */ \
+__asm__ volatile("str %%ax\n\t" /* 将任务寄存器中TSS段的选择符复制到ax中 */ \
         "subl %2, %%eax\n\t" /* eax - FIRST_TSS_ENTRY*8 -> eax */ \
         "shrl $4, %%eax\n\t" /* eax/16 -> eax = 当前任务号 */ \
         : "=a" (n) \
@@ -192,8 +203,8 @@ __asm__("str %%ax\n\t" /* 将任务寄存器中TSS段的选择符复制到ax中 
 //       ecx - 新任务n的任务结构指针task[n]
 
 #define switch_to(n) {\
-struct long{a, b;} __tmp; \
-__asm__ ("cmpl %%ecx, current\n\t" /* 任务n是当前任务吗？（current == task[n]?）*/ \
+struct {long a, b;} __tmp; \
+__asm__ volatile("cmpl %%ecx, current\n\t" /* 任务n是当前任务吗？（current == task[n]?）*/ \
         "je 1f\n\t" /* 是，则什么都不做，退出*/ \
         "movw %%dx, %1\n\t" /* 将新任务TSS的16位选择符存入__tmp.b中 */ \
         "xchgl %%ecx, current\n\t" /* current = task[n]; ecx = 被切换出的任务 */ \
@@ -212,7 +223,7 @@ __asm__ ("cmpl %%ecx, current\n\t" /* 任务n是当前任务吗？（current == 
 // %2 - 地址addr偏移7
 // edx - 基地址base
 #define _set_base(addr,base)  \
-__asm__ (/* "push %%edx\n\t" */ \
+__asm__ volatile(/* "push %%edx\n\t" */ \
 	"movw %%dx,%0\n\t" /* 基地址低16位（15-0） -> [addr+2] */ \
 	"rorl $16,%%edx\n\t" /* edx高16位（31-16） -> dx */ \
     "movb %%dl,%1\n\t" /* 基地址高16位中的低8位（23-16）-> [addr+4] */ \
@@ -222,7 +233,7 @@ __asm__ (/* "push %%edx\n\t" */ \
     "m" (*((addr)+4)), \
     "m" (*((addr)+7)), \
     "d" (base) \
-    :"dx" /* 告诉gcc编译其edx寄存器中的值被改变 */ \
+    /*:"dx" 告诉gcc编译其edx寄存器中的值被改变 */ \
 	)
 
 // 设置位于地址addr处描述符中的段限长字段（段长是limit）
@@ -230,24 +241,23 @@ __asm__ (/* "push %%edx\n\t" */ \
 // %1 - 地址addr偏移6处
 // edx - 段长值limit
 #define _set_limit(addr,limit) \
-__asm__ (/* "push %%edx\n\t" */ \
+__asm__ volatile(/* "push %%edx\n\t" */ \
 	"movw %%dx,%0\n\t" /* 段长limit低16位（15-0）-> [addr] */ \
 	"rorl $16,%%edx\n\t" /* edx 中的段长高4位（19-16）-> dl */ \
 	"movb %1,%%dh\n\t" /* 取原[addr+6]字节 -> dh, 其中高4位是些标志 */ \
 	"andb $0xf0,%%dh\n\t" /* 清dh的低4位（将存放段长位19-16） */ \
 	"orb %%dh,%%dl\n\t" /* 将原高4位标志和段长的高4位（19-16）合成1字节并放回[addr+6]处 */ \
-	"movb %%dl,%1\n\t" \
+	"movb %%dl,%1" \
 	/* "pop %%edx" */ \
 	::"m" (*(addr)), \
     "m" (*((addr)+6)), \
     "d" (limit) \
-    :"dx" \
 	)
 
 // 设置局部描述符表中ldt描述符的基地址字段
-#define set_base(ldt, base) _set_base(((char *)ldt), (base))
+#define set_base(ldt, base) _set_base(((char *)&(ldt)), (base))
 // 设置局部描述符表中ldt描述符的段长字段，limit >> 12 是因为当Descriptor中G位置位的时候，Limit单位是4KB
-#define set_limit(ldt, limit) _set_base(((char *)ldt), (limit) >> 12)
+#define set_limit(ldt, limit) _set_limit(((char *)&(ldt)), (limit - 1) >> 12)
 
 
 // 从地址addr处描述符中取段基地址。功能与_set_base() 正好相反
@@ -272,7 +282,7 @@ __base;})
 
 static inline unsigned long _get_base(char *addr) {
     unsigned long __base;
-    __asm__("movb %3, %%dh\n\t"
+    __asm__ volatile("movb %3, %%dh\n\t"
             "movb %2, %%dl\n\t"
             "shll $16, %%edx\n\t"
             "movw %1, %%dx\n\t"
@@ -288,7 +298,7 @@ static inline unsigned long _get_base(char *addr) {
 // 取段选择符segment指定的描述符中的限长值
 #define get_limit(segment) ({\
     unsigned long __limit; \
-    __asm__("lsll %1, %0\n\tincl %0":"=r"(__limit):"r"(segment)); \
+    __asm__ volatile("lsll %1, %0\n\tincl %0":"=r"(__limit):"r"(segment)); \
     __limit; \
     })
 

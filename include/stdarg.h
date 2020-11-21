@@ -11,10 +11,10 @@ typedef char *va_list;
 
 #ifndef __sparc__
 #define va_start(AP, LASTARG) 						\
-  (AP = ((char *) &(LASTARG) + __va_rounded_size (LASTARG)))
+ (AP = ((char *) &(LASTARG) + __va_rounded_size (LASTARG)))
 #else
 #define va_start(AP, LASTARG) 						\
-  (__builtin_saveregs (),						\
+ (__builtin_saveregs (),						\
   AP = ((char *) &(LASTARG) + __va_rounded_size (LASTARG)))
 #endif
 
@@ -22,7 +22,7 @@ void va_end (va_list);		/* Defined in gnulib */
 #define va_end(AP)
 
 #define va_arg(AP, TYPE)						\
-  (AP += __va_rounded_size (TYPE),					\
+ (AP += __va_rounded_size (TYPE),					\
   *((TYPE *) (AP - __va_rounded_size (TYPE))))
 
 #endif /* _STDARG_H */

@@ -1,17 +1,19 @@
 include ../Makefile.header
 
-LDFLAGS += -r
+OBJS = printk.o panic.o traps.o asm.o sched.o system_call.o sys.o fork.o serial_debug.o #vsprintf.o
+
+LDFLAGS	+= -r
 CFLAGS += -I../include
 
-OBJS = printk.o panic.o traps.o asm.o sched.o system_call.o
+.PHONY=clean run all
 
 all: kernel.o
-	
-kernel.o: $(OBJS) 
-	$(LD) $(LDFLAGS) -o kernel.o $(OBJS) 
+
+kernel.o: $(OBJS)
+	$(LD) $(LDFLAGS) -o kernel.o $(OBJS)
 
 .c.o:
-	$(CC) $(CFLAGS) \
+	@$(CC) $(CFLAGS) \
 		-c -o $*.o $<
 
 clean:

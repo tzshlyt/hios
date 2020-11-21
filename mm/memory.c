@@ -21,7 +21,11 @@
  *
  */
 
-#define LOW_MEM 0x100000                        // 内存低1MB，是系统代码所在
+#include <linux/kernel.h>
+#include <linux/head.h>
+#include <serial_debug.h>
+
+#define LOW_MEM 0x100000ul                      // 内存低1MB，是系统代码所在
 #define PAGING_MEMORY (15*1024*1024)            // 分页内存15MB，主内存区最多15M
 #define PAGING_PAGES (PAGING_MEMORY >> 12)      // 分页后物理内存页数(3840)
 #define MAP_NR(addr) (((addr) - LOW_MEM) >> 12) // 计算物理地址映射的页号
@@ -29,15 +33,17 @@
 
 // 从 from 复制 1 页内存到 to 处( 4K 字节)
 #define copy_page(from, to) \
-    __asm__("cld; rep; movsl;"::""S" (from), "D" (to), "c" (1024)")
+    __asm__ volatile("cld; rep; movsl;":"S" (from), "D" (to), "c" (1024))
 
 #define invalidate() \
-    __asm__("mov %%eax, %%cr3"::"a" (0))
+    __asm__ volatile("mov %%eax, %%cr3"::"a" (0))
 
-static long HIGH_MEMORY = 0;
+static unsigned long HIGH_MEMORY = 0;
+void un_wp_page(unsigned long * table_entry);
 
-// 物理内存映射字节图( 1 字节代表 1 页内存)。每个页面对应的字节用于标志页面当前被引用
-// （占用）次数。它最大可以映射 15MB 内存空间。
+// 物理内存映射字节图( 1 字节代表 1 页内存)。每个页面对应的字节用于标志页面当前被引用（占用）次数。
+// 它最大可以映射 15MB 内存空间。
+// 对于不能用做主内存页面的位置(缓冲区)均都预先被设置成USED（100）.
 static unsigned char mem_map[PAGING_PAGES] = {0,};
 
 static inline void oom() {
@@ -45,18 +51,30 @@ static inline void oom() {
 }
 
 // 物理内存初始化
-// 对1MB以上内存页页面为单位管理前初始化
+// 该函数对1MB以上的内存区域以页面为单位进行管理前的初始化设置工作。一个页面长度
+// 为4KB bytes.该函数把1MB以上所有物理内存划分成一个个页面，并使用一个页面映射字节
+// 数组mem_map[]来管理所有这些页面。对于具有16MB内存容量的机器，该数组共有3840
+// 项((16MB-1MB)/4KB)，即可管理3840个物理页面。每当一个物理内存页面被占用时就把
+// mem_map[]中对应的字节值增1；若释放一个物理页面，就把对应字节值减1。若字节值为0，
+// 则表示对应页面空闲；若字节值大于或等于1，则表示对应页面被占用或被不同程序共享占用。
+// 在该版本的Linux内核中，最多能管理16MB的物理内存，大于16MB的内存将弃之不用。
+// 对于具有16MB内存的PC机系统，在没有设置虚拟盘RAMDISK的情况下start_mem通常是4MB，
+// end_mem是16MB。因此此时主内存区范围是4MB-16MB,共有3072个物理页面可供分配。而
+// 范围0-1MB内存空间用于内核系统（其实内核只使用0-640Kb，剩下的部分被部分高速缓冲和
+// 设备内存占用）。
+// 参数start_mem是可用做页面分配的主内存区起始地址（已去除RANDISK所占内存空间）。
+// end_mem是实际物理内存最大地址。而地址范围start_mem到end_mem是主内存区。
 void mem_init(unsigned long start_mem, unsigned long end_mem) {
-    int i;
+    unsigned long i;
     HIGH_MEMORY = end_mem;                          // 设置内存最高端（16MB）
-    for (i = 0; i < PAGING_PAGES; i ++)             // 将 1MB 到 16MB 所有内存页对应的内存映射字节数组项置为已占用状态
+    for (i = 0; i < PAGING_PAGES; i ++)             // 首先将 1MB 到 16MB 所有内存页对应的内存映射字节数组项置为已占用状态
         mem_map[i] = USED;
 
-    i = MAP_NR(start_mem);                          // start_mem 对应的项号
+    i = (unsigned long)MAP_NR(start_mem);           // 主内存区起始位置对应的项号
     end_mem -= start_mem;
-    end_mem >> 12;                                  // 主内存区页面数
+    end_mem >>= 12;                                 // 主内存区页面数
     while(end_mem-- > 0) {
-        mem_map[i++] = 0;                           // 主内存区页面对应字节值清零
+        mem_map[i++] = 0;                           // 主内存区页面对应页面字节值清零
     }
     return;
 }
@@ -65,7 +83,7 @@ void mem_init(unsigned long start_mem, unsigned long end_mem) {
 // 调试使用
 void calc_mem(void) {
     int i, j, k, free = 0;
-    long *pg_tbl, *dir;
+    long *pg_tbl;
 
     for (i = 0; i < PAGING_PAGES; i++) {
         if (!mem_map[i]) free++;
@@ -73,8 +91,8 @@ void calc_mem(void) {
     printk("%d pages free (of %d in total)\n", free, PAGING_PAGES);
 
     for(i = 2; i < 1024; i++) {
-        if (dir[i] & 1) {
-            pg_tbl = (long *)(0xfffff000 & dir[i]);
+        if (pg_dir[i] & 1) {
+            pg_tbl = (long *)(0xfffff000 & pg_dir[i]);
             for (j = k = 0; j < 1024; j++) {
                 if (pg_tbl[j] & 1) {
                     k++;
@@ -95,7 +113,7 @@ unsigned long get_free_page(void) {
     // std : 置位DF位
     // repne: repeat not equal
     // scasb: 意思是 al - di, 每比较一次di自动变化
-    __asm__("std ; repne ; scasb\n\t"   // std 置位方向位, al(0) 与对应每个页面的(di)内容比较
+    __asm__ volatile("std ; repne; scasb\n\t"   // std 置位方向位, al(0) 与对应每个页面的(di)内容比较
         "jne 1f\n\t"                    // 如果没有等于0的字节，则跳转结束（返回0）
         "movb $1,1(%%edi)\n\t"          // 1 => [1+edi], 将对应页面内存映像比特位置1
         "sall $12,%%ecx\n\t"            // 页面数*4K = 相对页面起始地址
@@ -173,67 +191,9 @@ int free_page_tables(unsigned long from, unsigned long size) {
         *dir = 0;
     }
 
-    // invalidate();       // 刷新页变换高速缓冲
+    invalidate();       // 刷新页变换高速缓冲
     return 0;
 }
-
-// 复制页目录表项和页表项
-// 此时原物理内存区将被共享，此后两个进程（父进程和其子进程）将共享内存区,
-// 直到有一个进程执行写操作时，内核才会为写操作进程分配新的内存页（写时复制机制）
-// from , to 线性地址
-// size - 需要复制（共享）的内存长度，单位是字节
-int copy_page_tables(unsigned long from, unsigned long to, long size) {
-    unsigned long * from_page_table;
-    unsigned long * to_page_table;
-    unsigned long this_page;
-    unsigned long * from_dir, * to_dir;
-    unsigned long nr;
-
-    // 4MB 内存边界对齐
-    if ((from & 0x3fffff) || (to & 0x3fffff)) {
-        panic("copy_page_tables called with wrong alignment");
-    }
-
-    from_dir = (unsigned long *) ((from >> 20) & 0xffc);
-    to_dir = (unsigned long *) ((to >> 20) & 0xffc);
-    size = ((unsigned)(size + 0x3fffff)) >> 22;
-
-    for (; size-- > 0; from_dir++, to_dir++)  {
-        // 若目的目录项指定的页表已经存在，则出错死机
-        if (1 & *to_dir) {
-            panic("copy_page_tables: already exist");
-        }
-        // 若源目录项无效，继续处理下一个
-        if (!(1 & *from_dir)) {
-            continue;
-        }
-
-        // 取空闲页面保存目的目录项对应的页表
-        from_page_table = (unsigned long *)(0xfffff00 & *from_dir);
-        if (!(to_page_table = (unsigned long *)get_free_page())) {
-            return -1;
-        }
-
-        *to_dir = ((unsigned long) to_page_table) | 7;      // 设置标志
-        nr = (from == 0) ? 0xA0 : 1024;                     // 若内核空间，则仅需复制头160页（640KB）
-        for (; nr-- > 0; from_page_table++, to_page_table++) {
-            this_page = *from_page_table;
-            if (!(1 & this_page))               // 当前源页面没有使用，则不用复制
-                continue;
-            this_page &= ~2;                    // 置为可读
-            *to_page_table = this_page;
-
-            if(this_page > LOW_MEM) {           // 主内存中
-                *from_page_table = this_page;   // 令源页表项也只读
-                mem_map[MAP_NR(this_page)]++;
-            }
-        }
-    }
-
-    invalidate();
-    return 0;
-}
-
 
 // 把一物理内存页映射到线性地址空间
 // 在处理缺页异常 do_no_page() 中会调此函数
@@ -251,9 +211,9 @@ unsigned long put_page(unsigned long page, unsigned long address) {
     // 根据线性地址 address 计算其在页目录表中对应的目录项指针，并从中取得二级页表地址
     pg_tbl = (unsigned long *)((address >> 20) & 0xffc);
 
-    printk("Params: pg_tbl = %x, entry = %x\n", pg_tbl, (address >> 12) & 0x3ff);
+    // printk("Params: pg_tbl = %x, entry = %x\n", pg_tbl, (address >> 12) & 0x3ff);
     if((*pg_tbl) & 1) {   // 如果该目录项有效（P=1）, 即指定的页表在内存中
-        printk("Page table now available\n");
+        // printk("Page table now available\n");
         pg_tbl = (unsigned long *)(*pg_tbl & 0xfffff000);
     }
     else {               // 否则申请一空闲页面给页表使用，并在相应目录项置相应标志，然后把页表地址放到pg_tbl变量中
@@ -263,11 +223,11 @@ unsigned long put_page(unsigned long page, unsigned long address) {
         }
 
         *pg_tbl = tmp | 7;
-        printk("Tmp = %x\n", tmp);
-        printk("Page Table = %x\n", *pg_tbl);
+        // printk("Tmp = %x\n", tmp);
+        // printk("Page Table = %x\n", *pg_tbl);
         pg_tbl = (unsigned long *) tmp;
     }
-    printk("Put Page Success\n");
+    // printk("Put Page Success\n");
     // 最后找到的页表 page_table 中设置相关页表项内容
     // 即把物理页面 page 的地址填入表项同时置位3个标志（U/S、W/R、P）
     // 该页表项在页表中的索引值等于线性地址 位21-位12 组成的 10bit 值，每个页表共可有 1024 项（0 -- 0x3ff）
@@ -284,6 +244,30 @@ void get_empty_page(unsigned long address) {
     if (!(tmp = get_free_page()) || !put_page(tmp, address)) {
         free_page(tmp);
         oom();
+    }
+    return;
+}
+
+// 写页面验证
+// 判断页项中 R/W 标志
+// 若页面不可写，则复制页面
+// 在 fork.c 中被 verify_area() 调用
+// address - 页面线性地址
+void write_verify(unsigned long address) {
+    unsigned long page;
+
+    // 检查页目录项是否存在
+    // dir = (unsigned long *)((address >> 20) & 0xffc)
+    // pag = *(dir)
+    if(!( (page = *((unsigned long *)((address >> 20) & 0xffc)) ) & 1)) {
+        return ;
+    }
+
+    // 取页表首地址
+    page &= 0xfffff000;
+    page += ((address >> 10) & 0xffc);      // 因为pape 是 unsigned long类型，每项4个字节，相当于 >>12 然后 << 2
+    if((*(unsigned long *)page & 3) == 1) {   // 页表P = 1, R/W = 0
+        un_wp_page((unsigned long *)page);
     }
     return;
 }
@@ -316,30 +300,6 @@ void un_wp_page(unsigned long *table_entry) {
     return;
 }
 
-// 写页面验证
-// 判断页项中 R/W 标志
-// 若页面不可写，则复制页面
-// 在 fork.c 中被 verify_area() 调用
-// address - 页面线性地址
-void write_verify(unsigned long address) {
-    unsigned long page;
-
-    // 检查页目录项是否存在
-    // dir = (unsigned long *)((address >> 20) & 0xffc)
-    // pag = *(dir)
-    if(!( (page = *((unsigned long *)((address >> 20) & 0xffc)) ) & 1)) {
-        return ;
-    }
-
-    // 取页表首地址
-    page &= 0xfffff000;
-    page += ((address >> 10) & 0xffc);      // 因为pape 是 unsigned long类型，每项4个字节，相当于 >>12 然后 << 2
-    if(*(unsigned long *)page & 3 == 1) {   // 页表P = 1, R/W = 0
-        un_wp_page((unsigned long *)page);
-    }
-    return;
-}
-
 // 当用户试图往一共享页上写时，该函数处理已存在的内存页面（写时复制）
 // 它是通过将页面复制到一个新的地址上并递减原来页面共享计数值实现的
 // 如果它在代码空间，就显示段出错信息并退出
@@ -348,8 +308,9 @@ void write_verify(unsigned long address) {
 // error_code - cpu 自动产生
 // address - 页面线性地址
 void do_wp_page(unsigned long error_code, unsigned long address) {
-    un_wp_page((unsigned long *) (((address >> 10) & 0xffc) +
-        ((*(unsigned long *)((address >> 20) & 0xffc))) & 0xfffff000));
+    error_code = error_code; // 纯粹为了消除警告
+    un_wp_page((unsigned long *) ((((address >> 10) & 0xffc) +
+        ((*(unsigned long *)((address >> 20) & 0xffc)))) & 0xfffff000));
 }
 
 // 执行缺页处理
@@ -357,10 +318,10 @@ void do_wp_page(unsigned long error_code, unsigned long address) {
 // error_code - cup 自动产生
 // address - 页面线性地址
 void do_no_page(unsigned long error_code, unsigned long address) {
-    unsigned long tmp;
+    // unsigned long tmp;
     unsigned long page;
 
-    printk("Page Fault at [%x], errono %d\n", address, error_code);
+    s_printk("Page Fault at [%x], errono %d\n", address, error_code);
     address &= 0xfffff000;
     if (!(page = get_free_page()))
         oom();
@@ -368,6 +329,63 @@ void do_no_page(unsigned long error_code, unsigned long address) {
         return;
     free_page(page);
     oom();
+}
+
+// 复制页目录表项和页表项
+// 此时原物理内存区将被共享，此后两个进程（父进程和其子进程）将共享内存区,
+// 直到有一个进程执行写操作时，内核才会为写操作进程分配新的内存页（写时复制机制）
+// from , to 线性地址
+// size - 需要复制（共享）的内存长度，单位是字节
+int copy_page_tables(unsigned long from, unsigned long to, unsigned long size) {
+    unsigned long * from_page_table;
+    unsigned long * to_page_table;
+    unsigned long this_page;
+    unsigned long * from_dir, * to_dir;
+    unsigned long nr;
+
+    // 4MB 内存边界对齐
+    if ((from & 0x3fffff) || (to & 0x3fffff)) {
+        panic("copy_page_tables called with wrong alignment");
+    }
+
+    from_dir = 0 + (unsigned long *) ((from >> 20) & 0xffc);
+    to_dir = 0 + (unsigned long *) ((to >> 20) & 0xffc);
+    size = ((unsigned)(size + 0x3fffff)) >> 22;
+
+    for (; size-- > 0; from_dir++, to_dir++)  {
+        // 若目的目录项指定的页表已经存在，则出错死机
+        if (1 & *to_dir) {
+            panic("copy_page_tables: already exist");
+        }
+        // 若源目录项无效，继续处理下一个
+        if (!(1 & *from_dir)) {
+            continue;
+        }
+
+        // 取空闲页面保存目的目录项对应的页表
+        // from_page_table = (unsigned long *)(0xfffff00 & *from_dir);
+        if (!(to_page_table = (unsigned long *)get_free_page())) {
+            return -1;
+        }
+
+        *to_dir = ((unsigned long) to_page_table) | 7;      // 设置标志
+        nr = (from == 0) ? 0xA0 : 1024;                     // 若内核空间，则仅需复制头160页（640KB）
+        for (; nr-- > 0; from_page_table++, to_page_table++) {
+            this_page = *from_page_table;
+            if (!(1 & this_page))               // 当前源页面没有使用，则不用复制
+                continue;
+            this_page &= (unsigned long)~2;                    // 置为可读
+            *to_page_table = this_page;
+
+            if(this_page > LOW_MEM) {           // 主内存中
+                *from_page_table = this_page;   // 令源页表项也只读
+                mem_map[MAP_NR(this_page)]++;
+            }
+        }
+    }
+
+    invalidate();
+    return 0;
 }
 
 

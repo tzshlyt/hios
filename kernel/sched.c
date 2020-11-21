@@ -4,23 +4,32 @@
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
+#include <linux/sys.h>
 #include <asm/system.h>
 #include <asm/io.h>
+#include <serial_debug.h>
 
 extern int timer_interrupt(void);
+extern int system_call(void);
 
-// 每个进程在内核状态运行时都有自己的内核态堆栈
+// 定义任务联合体
+// 每个任务(进程)在内核态运行时都有自己的内核态堆栈。这里定义了任务的内核态堆栈结构
+// 因为一个任务的数据结构与其内核态堆栈在同一内存页中，所以从堆栈段寄存器ss可以获得其数据段选择符
 union task_union {
-    struct task_struct task;    // 因为一个任务的数据结构与其内核态堆栈在同一内存页中，所以从堆栈段寄存器ss可以获得其数据段选择符
+    struct task_struct task;
     char stack[PAGE_SIZE];
 };
 static union task_union init_task = {INIT_TASK,};   // 定义初始任务的数据 sched.h
 
-long volatile jiffies = 0;
+long user_stack[PAGE_SIZE >> 2];
 long startup_time = 0;                                      // 开机时间，从1970开始计时的秒数
 struct task_struct *current = &(init_task.task);            // 当前任务指针（初始化指针任务0）
 struct task_struct *last_task_used_math = NULL;             // 处理过协处理任务的指针
 struct task_struct *task[NR_TASKS] = {&(init_task.task),};  // 定义任务指针数组
+
+// PC机8253定时芯片的输入时钟频率约为1.193180MHz. Linux内核希望定时器发出中断的频率是
+// 100Hz，也即没10ms发出一次时钟中断。因此这里的LATCH是设置8253芯片的初值。
+#define LATCH (1193180/HZ)
 
 // 定义用户堆栈，共1K项，容量4K字节
 // 在内核初始化操作中被用作内核栈
@@ -29,30 +38,115 @@ struct task_struct *task[NR_TASKS] = {&(init_task.task),};  // 定义任务指�
 // 下面结构用于设置堆栈ss:esp, 见head.s
 // ss -> 内核数据段选择符0x10
 // esp -> user_stack数组最后一项后面，因为栈是递减的
-long user_stack[PAGE_SIZE >> 2];
+// 我们测算出其起始位置为 0x1e25c (120k)
 struct {
     long *a;
     short b;
 } stack_start = {&user_stack[PAGE_SIZE >> 2], 0x10};
 
+// 首先把当前任务置为不可中断的等待状态(只能由wake_up函数来唤醒)，并让睡眠队列头指针指向当前任务，执行调度函数，直到明确的唤醒时才会返回，该任务重新开始执行。
+// 因为如果没有被唤醒(即state置0)是不可能被调度的，调度算法只会选出”状态为0”的进程进行调度运行
+// 该函数提供了进程与中断处理程序之间的同步机制
+// p: 等待任务队列头指针
 void sleep_on(struct task_struct **p) {
-
+    struct task_struct *tmp;
+    if (!p)                                     // 若指针无效，则退出。（指针所指对象可以是NULL， 但是指针本身不应该是0)
+        return;
+    if (current == &(init_task.task))           // 当前任务是0，则死机
+        panic("task[0] trying to sleep");
+    tmp = *p;                                   // 让tmp指向已经在等待队列的任务(如果有的话)
+    *p = current;                               // 把当前任务插入到 *p 的等待队列中
+    current->state = TASK_UNINTERRUPTIBLE;      // 将当前任务置为不可中断的等待状态
+    schedule();                                 // 执行重新调度
+    *p = tmp;                                   // 只有当这个等待任务被唤醒时，调度程序才返回到这里，表示本进程已被明确唤醒（就绪态）
+    if (tmp)                                    // 肯能存在多个任务此时被唤醒，那么如果还存在等待任务，则将状态设置为”就绪
+        tmp->state = TASK_RUNNING;
 }
 
 void schedule(void) {
+    // TODO: 先不考虑信号处理
 
+    int i, next, c;
+    struct task_struct **p;
+
+    // 从后往前遍历任务，找到就绪任务剩余执行时间counter最大的任务，切换并运行
+    while (1) {
+        c = -1;
+        next = 0;
+        i = NR_TASKS;
+        p = &task[NR_TASKS];
+        while (--i) {
+            if (!*(--p))            // 跳过不含任务的数组槽
+                continue;
+            if ((*p)->state == TASK_RUNNING && (*p)->counter > c) {     // 找出任务运行时间的递减滴答计数最大的，运行时间不长
+                c = (*p)->counter;
+                next = i;
+            }
+        }
+        // 如果有任务 counter > 0 或者没有可运行的任务，则退出
+        // 否则根据每个任务的优先值，更新每个任务的 counter 值，然后重新比较，注意这里计算不考虑进程的状态
+        if (c) break;
+        for( p = &LAST_TASK; p > &FIRST_TASK; p--) {
+            if (!*p) {
+                (*p)->counter = ((*p)->counter >> 1) + (*p)->priority;
+            }
+        }
+    }
+
+    // 若没有任务可运行时，next为0，会去执行任务0。此时任务0仅执行pause()系统调用，并又会调用本函数
+    switch_to(next);
 }
 
-void wake_up(struct task_struct **p) {
+void show_task_info(struct task_struct *task) {
+    s_printk("Current task Info\n================\n");
+    s_printk("pid = %d\n", task->state);
+    s_printk("counter = %d\n", task->counter);
+    s_printk("start_code = %x\n", task->start_code);
+    s_printk("end_code = %x\n", task->end_code);
+    s_printk("brk = %x\n", current->ldt[0]);
+    s_printk("gid = 0x%x\n", current->gid);
+    s_printk("tss.ldt = 0x%x\n", current->tss.ldt);
+    // s_printk("tss.eip = 0x%x\n", current->eip);
+}
 
+// 唤醒 *p 指向的任务
+// *p 是任务等待队列的头指针
+// 由于新等待任务是插在头部的，所以唤醒的是最后进入的等待队列的任务
+void wake_up(struct task_struct **p) {
+    if (p && *p) {
+        (**p).state = 0;
+        *p = NULL;
+    }
 }
 
 void interruptible_sleep_on(struct task_struct **p) {
-
+    struct task_struct *tmp;
+    if (!p)
+        return;
+    if (current == &(init_task.task))
+        panic("task[0] trying to sleep");
+    tmp = *p;
+    *p = current;
+repeat: current->state = TASK_INTERRUPTIBLE;
+    schedule();
+    if (*p && *p != current) {
+        (**p).state = 0;
+        goto repeat;
+    }
+    *p = tmp;
+    if (tmp) {
+        tmp->state = 0;
+    }
 }
 
+// pause() 系统调用，转换当前任务状态为可中断的等待状态，并重新调度
+// 将导致进程进入睡眠状态，直到收到一个信号。该信号用于终止进程或使进程调用一个信号捕获函数。
+// 只有当捕获一个信号，并且信号捕获处理函数返回时，pause() 才返回。此时pause()返回值应该是-1，并且errno被置为EINTR
+// 这里还没有完全实现直到(直到0.95版)
 int sys_pause(void) {
-
+    current->state = TASK_INTERRUPTIBLE;
+    schedule();
+    return 0;
 }
 
 // 时钟中断处理函数
@@ -60,24 +154,65 @@ int sys_pause(void) {
 // cpl 是当前特权级别 0 或 3, 是时钟中断发生时正被执行的代码选择符中的特权级
 // 对于一个进程由于执行时间片用完时，则进行任务切换，并执行一个计时更新工作
 int counter = 0;
+long volatile jiffies = 0;
 void do_timer(long cpl) {
-    counter++;
-    if(counter == 10){
-        printk("CPL = %d Jiffies = %d\n", cpl, jiffies);
-        counter = 0;
+    // counter++;
+    // if(counter == 10){
+    //     printk("CPL = %d Jiffies = %d\n", cpl, jiffies);
+    //     counter = 0;
+    // }
+    if (!cpl) {
+        current->stime++;   // 系统运行时间
+    } else {
+        current->utime++;   // 用户运行时间
     }
+    if ((--current->counter) > 0) return;   // 如果进程运行时间还没完，则退出。
+    current->counter = 0;
+    if(!cpl) return;                        // 内核程序，不依赖 counter 进行调度
+    schedule();                             // 执行调度
 }
 
-// 这是一个临时函数，用于初始化8253计时器
-// 并开启时钟中断
+// 内核调度程序的初始化子程序
 void sched_init() {
     int divisor = 1193180/HZ;
-    outb_p(0x36, 0x43);
-    outb_p(divisor & 0xFF, 0x40);
-    outb_p(divisor >> 8, 0x40);
 
+    int i;
+    struct desc_struct *p;  // 描述符表结构指针
+
+    // 把任务状态描述符表和局部数据描述符表挂接到全局描述符表GDT中
+    set_tss_desc(gdt+FIRST_TSS_ENTRY, &(init_task.task.tss));
+    set_ldt_desc(gdt+FIRST_LDT_ENTRY, &(init_task.task.ldt));
+
+    // 清任务数组和描述符表项(注意 i=1 开始，所以初始任务的描述符还在)
+    p = gdt + 2 + FIRST_TSS_ENTRY; // 跳过 init_task
+    for(i = 1; i < NR_TASKS; i++) {
+        task[i] = NULL;
+        p->a = p->b = 0;
+        p++;
+        p->a = p->b = 0;
+        p++;
+    }
+
+    // 清除标志寄存器中的位 NT，NT 标志用于控制程序的递归调用(Nested Task)
+    // 当NT置位时，那么当前中断任务执行 iret 指令时就会引起任务切换
+    // NT 指出 TSS 中的 back_link 字段是否有效
+    __asm__("pushfl; andl $0xffffbfff, (%esp); popfl");
+    ltr(0);
+    lldt(0);
+
+    // 初始化8253定时器。通道0，选择工作方式3，二进制计数方式。
+    // 通道0的输出引脚接在中断控制主芯片的IRQ0上，它每10毫秒发出一个IRQ0请求。
+    // LATCH是初始定时计数值。
+    outb_p(0x43, 0x36);                     /* binary, mode 3, LSB/MSB, ch 0 */
+    outb_p(0x40, divisor & 0xFF);           /* LSB */
+    outb_p(0x40, divisor >> 8);             /* MSB */
+
+    // 设置时钟中断处理程序句柄(设置时钟中断门)。修改中断控制器屏蔽码，允许时钟中断。
+    // 然后设置系统调用中断门。这两个设置中断描述符表 IDT 中描述符在宏定义在文件 include/asm/system.h中
     // timer interrupt gate setup: INT 0x20
     set_intr_gate(0x20, &timer_interrupt);
     // Make 8259 accept timer interrupt
-    outb(inb_p(0x21) & ~0x01, 0x21);
+    outb(0x21, inb_p(0x21) & ~0x01);
+    // system_call
+    set_system_gate(0x80, &system_call);
 }

@@ -3,37 +3,104 @@
  *
  */
 
-#define sti()  __asm__ volatile ("sti"::)
-#define cli()  __asm__ volatile ("cli"::)
-#define nop()  __asm__ volatile ("nop"::)
-#define iret() __asm__ volatile ("iret"::)
+#define sti()  __asm__ volatile("sti"::)   // Set Interupt，设置中断
+#define cli()  __asm__ volatile("cli"::)   // Clear Interupt，清除中断
+#define nop()  __asm__ volatile("nop"::)
+#define iret() __asm__ volatile("iret"::)
 
 // 下面这个宏是通用的设置门描述符的宏，参数分别为
 // gate_addr: IDT 描述符的地址
-// type: 门类型
-// dpl: 特权级别
+// type: 门类型 0xE: 中断门，OxF: 陷阱门
+// dpl: 特权级别 0: 内核， 3: 用户
 // funaddr: 中断处理程序的32位地址
 // 因为中断处理属于内核段代码，所以它们段选择符值均为 0x0008（在eax寄存器高字节中指定）
+/*
+   中断描述符结构:
+       31                              15  14    13  12      7     4        0
+       -----------------------------------------------------------------------
+       ｜ 中断处理函数地址(offset)位 31-16    ｜ P | DPL | 0 | TYPE | 000 | 未使用｜
+       -----------------------------------------------------------------------
+       ｜ 段选择符(selector) 0x8: 代码段  |    中断处理函数地址 offset 位15-0      ｜
+       -----------------------------------------------------------------------
+*/
 #define _set_gate(gate_addr, type, dpl, funaddr) \
-    __asm__ volatile (\
-            "movw %%dx, %%ax\n\t"/* 将类型标志字与偏移高字组合成描述符低4字节(eax) */ \
-            "movw %0, %%dx\n\t"/* 将类型标志字与偏移高字组合成描述符高4字节(edx) */\
-            "movl %%eax, %1\n\t"/* 分别设置门描述符的低4字节和高4字节 */\
+    __asm__ volatile(\
+            "movw %%dx, %%ax\n\t"/* 将偏移地址低字与段选择符组合成描述符低 4 字节(eax) */ \
+            "movw %0, %%dx\n\t"/* 将类型标志字与偏移高字组合成描述符高 4 字节(edx) */\
+            "movl %%eax, %1\n\t"/* 分别设置门描述符的低 4 字节和高 4 字节 */\
             "movl %%edx, %2"\
             :\
-            :"i" ((short)(0x8000 + ((dpl) << 13) + ((type) << 8))), \
-            "o" (*((char *) (gate_addr))),\
+            :"i" ((short)(0x8000 + ((dpl) << 13) + ((type) << 8))), /* “i”: 使用一个立即整数操作数(值固定)；也包含仅在编译时才能确定其值的符号常量 */ \
+            "o" (*((char *) (gate_addr))), /* “o”: 使用一个内存操作数，但是要求内存地址范围在在同一段内。例如，加上一个小的偏移量来形成一个可用的地址*/ \
             "o" (*(4 + (char *)(gate_addr))), \
             "a" (0x00080000), \
             "d" ((char*)(funaddr)))
 
-// 陷阱门, Type = 0xF
+// 陷阱门, Type = 0xF, 特权级别
 #define set_trap_gate(n, funaddr) \
     _set_gate(&idt[n], 0xF, 0, funaddr)
 
-// 中断门, Type = 0xE
+// 中断门, Type = 0xE, 特权级别
 #define set_intr_gate(n, funaddr) \
     _set_gate(&idt[n], 0xE, 0, funaddr)
 
+// 系统陷阱门
+// 特权级别为3: 用户级别，因此设置的中断处理函数能够被所有程序执行
+// 例如单步调试、溢出出错和边界超出出错处理
+// 将 system_call 与中断描述符表相挂接
 #define set_system_gate(n, funaddr) \
     _set_gate(&idt[n], 0xF, 3, funaddr)
+
+
+#define _set_seg_desc(gate_addr,type,dpl,base,limit) {\
+    *(gate_addr) = ((base) & 0xff000000) | \
+    (((base) & 0x00ff0000)>>16) | \
+    ((limit) & 0xf0000) | \
+    ((dpl)<<13) | \
+    (0x00408000) | \
+    ((type)<<8); \
+    *((gate_addr)+1) = (((base) & 0x0000ffff)<<16) | \
+    ((limit) & 0x0ffff); }
+
+
+// 在全局表中设置任务状态段/局部表描述符。
+// 状态段和局部表段的长度均被设置成104字节。
+// n - 在全局表中描述符项n所对应的地址
+// addr - 状态段/局部表所在内存的基地址
+// type - 描述符中的标志类型字节
+// %0 - exa(地址addr)
+// %1 - 描述符项 n 的地址
+// %2 - 描述符项 n 的地址偏移2处
+// %3 - 描述符项 n 的地址偏移4处
+// %4 - 描述符项 n 的地址偏移5处
+// %5 - 描述符项 n 的地址偏移6处
+// %6 - 描述符项 n 的地址偏移7处
+/*
+#     共使用 8 字节
+#
+#     31             23                                15   14   12  11      7           0
+#     -------------------------------------------------------------------------------------
+#     |  base 31-24   | G | B/D | 0 | AVL | limit 19-16 | P | DPL | 1 | type | base 23-16 |
+#     -------------------------------------------------------------------------------------
+#     |   base 15-0                                     |          limit 15-0          	  |
+#     -------------------------------------------------------------------------------------
+#     |     3字节     |            2字节                 |          1字节      ｜   0 字节   |
+*/
+#define _set_tssldt_desc(n,addr,type) \
+    __asm__ volatile("movw $104,%1\n\t"  /* 将TSS(或LDT)长度放入描述符长度域(第0-1字节) */\
+            "movw %%ax,%2\n\t" /* 将基地址的低字放入描述符第 2-3 字节*/\
+            "rorl $16,%%eax\n\t" /* 将基地址高字右循环移入ax中（低字则进入高字处） */\
+            "movb %%al,%3\n\t" /* 将基地址高字中低字节移入描述符第4字节 */\
+            "movb $" type ",%4\n\t" /* 将标志类型字节移入描述符第5字节 */\
+            "movb $0x00,%5\n\t" /* 描述符第6字节置0 */\
+            "movb %%ah,%6\n\t" /* 将基地址高字中高字节移入描述符第7字节 */\
+            "rorl $16,%%eax" /* 再右循环16比特，eax恢复原值 */\
+            ::"a" (addr), "m" (*(n)), "m" (*(n+2)), "m" (*(n+4)), \
+            "m" (*(n+5)), "m" (*(n+6)), "m" (*(n+7)) \
+            )
+// n - 该描述符的指针
+// addr - 描述符项中段的基地址值
+// 0x89 - 任务状态段描述符的类型
+// 0x82 - 局部表段描述符的类型
+#define set_tss_desc(n, addr) _set_tssldt_desc(((char *) (n)), ((int) (addr)), "0x89")
+#define set_ldt_desc(n, addr) _set_tssldt_desc(((char *) (n)), ((int) (addr)), "0x82")

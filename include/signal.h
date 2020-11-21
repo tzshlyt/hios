@@ -11,4 +11,3 @@ struct sigaction {
 };
 
 #endif
-

@@ -2,7 +2,7 @@
 #include <linux/mm.h>
 #include <asm/io.h>
 #include <stdarg.h>
-
+#include <stddef.h>
 
 #define PAGE_SIZE 4096
 #define VIDEO_MEM 0xB8000   // 屏幕映射内存地址, 固定地址
@@ -28,12 +28,12 @@ struct video_info {
 
 int video_x, video_y;
 
-char *video_buffer = VIDEO_MEM;
+char *video_buffer = (char *)VIDEO_MEM;
 
 void set_cursor_offset(int offset);
 
 void video_init() {
-    struct video_info *info = 0x9000;   // setup.s 中保存了屏幕设备信息
+    // struct video_info *info = 0x9000;   // setup.s 中保存了屏幕设备信息
 
     video_x = 0;
     video_y = 0;
@@ -50,20 +50,20 @@ int video_gety() {
 }
 
 void update_cursor(int row, int col) {
-    unsigned int pos = (row * VIDEO_X_SZ) + col;
+    unsigned int pos = ((unsigned int)row * VIDEO_X_SZ) + (unsigned int)col;
     // LOW Cursor port to VGA Index Registe
-    outb(0x0f, REG_SCREEN_CTRL);
-    outb((unsigned char)(pos & 0xff), REG_SCREEN_DATA);
+    outb(REG_SCREEN_CTRL, 0x0f);
+    outb(REG_SCREEN_DATA, (unsigned char)(pos & 0xff));
     // High Cursor port to VGA Index Registe
-    outb(0x0e, REG_SCREEN_CTRL);
-    outb((unsigned char)((pos >> 8) & 0xff), REG_SCREEN_DATA);
+    outb(REG_SCREEN_CTRL, 0x0e);
+    outb(REG_SCREEN_DATA, (unsigned char)((pos >> 8) & 0xff));
 }
 
 int get_cursor() {
     int offset;
-    outb(0x0f, REG_SCREEN_CTRL);
+    outb(REG_SCREEN_CTRL, 0x0f);
     offset = inb(REG_SCREEN_DATA) << 8;
-    outb(0x0e, REG_SCREEN_CTRL);
+    outb(REG_SCREEN_CTRL, 0x0e);
     offset += inb(REG_SCREEN_DATA);
     return offset;
 }

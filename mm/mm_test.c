@@ -1,4 +1,10 @@
+/*
+ * File to show mm functional and test mm
+ *
+ */
+
 #include <linux/kernel.h>
+#include <linux/mm.h>
 
 #define invalidate() \
     __asm__ volatile("mov %%eax, %%cr3"::"a" (0))
@@ -6,14 +12,14 @@
 unsigned long put_page(unsigned long page, unsigned long address);
 
 void testoom() {
-    int i = 0;
-    for (i = 0; i < 20 * 1024 * 1024; i += 4096)
-        do_no_page(0, i);
-    return;
+    for(int i = 0; i < 20 * 1024 * 1024; i += 4096)
+        do_no_page(0, (unsigned long)i);
+    // This should not return!
+    return ;
 }
 
 void test_put_page() {
-    char *b = 0x100000;
+    char *b = (char *)0x100000;
     calc_mem();
     //put_page(0x200000, 0x100000);
     calc_mem();
@@ -32,7 +38,7 @@ unsigned long *linear_to_pte(unsigned long addr) {
     unsigned long *pde = (unsigned long *)((addr >> 20) & 0xffc);
     // Page dir not exist
     // Or the address is not inside the page table address range(<=4KB)
-    if(!(*pde & 1) || pde > 0x1000) {
+    if(!(*pde & 1) || (unsigned long)pde > 0x1000) {
         return 0;
     }
     // Now it is page table address :P
@@ -82,7 +88,6 @@ void mm_print_pageinfo(unsigned long addr) {
 
 
 int mmtest_main(void) {
-    int i = 0;
     printk("Running Memory function tests\n");
     printk("1. Make Linear Address 0xdad233 unavailable\n");
 
@@ -94,17 +99,18 @@ int mmtest_main(void) {
     // (Hint: add a table entry map to physical address 3MB)
     //
     printk("2. Put page(0x300000) at linear address 0xdad233\n");
-    put_page(0x300000, 0xdad233);
+    //put_page(0x300000, 0xdad233);
 
-    unsigned long *x = 0xdad233;
+    unsigned long *x = (unsigned long *)0xdad233;
     *x = 0x23333333;
     printk("X = %x\n", *x);
+    while(1);
 
     // Then make the linear address 0xdad233 Read Only
 
     printk("3. Make 0xdad233 READ ONLY\n");
     mm_read_only(0xdad233);
-    x = 0xdad233;
+    x = (unsigned long *)0xdad233;
     // DO not modify this code
     // Here will disable WP bit (temporarily)
     asm volatile("mov %%cr0, %%eax\n\t"

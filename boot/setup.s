@@ -5,16 +5,16 @@
 .equ SETUPSEG,  0x9020
 .equ INITSEG,   0x9000
 .equ SYSSEG,    0x1000
-.equ LEN, 50
+.equ LEN, 54
 
-.globl _start
-.globl begtext, begdata, begbass, endtext, enddta, endbss
+.globl _start, begtext, begdata, begbass, endtext, enddta, endbss
+
 .text
-begtext:
+	begtext:
 .data
-begdata:
+	begdata:
 .bss
-begbss:
+	begbss:
 .text
 
 show_text:
@@ -175,8 +175,8 @@ do_move:
 end_move:
 	mov $SETUPSEG, %ax
 	mov %ax, %ds        # ds 指向本程序 setup.s
-	lgdt gdt_48
     lidt idt_48
+	lgdt gdt_48
 
 
 # 开启A20地址线，
@@ -232,10 +232,15 @@ end_move:
 
 # GDTR 信息
 gdt_48:
-    # 这里全局表长度社着为 2KB （0x7ff）即可，因为每个描述符 8 字节
+    # 这里全局表长度设为 2KB （0x7ff）即可，因为每个描述符 8 字节
     # 所以表中共可有 256 项
 	.word 0x800	            # gdt 表限长，2kB
 	.word 512+gdt, 0x9	    # gdt 表基地址，0x0009 << 16 + 0x0200 + gdt, 等于0x90200 + gdt
+
+idt_48:
+    # 先设置一个空表
+    .word 0                 # limit = 0
+    .word 0, 0              # base = 0L
 
 gdt:
     # offset 0x0
@@ -253,20 +258,8 @@ gdt:
 	.word	0x9200          # 1 00 1 0010 0x00，数据段为可读可写
 	.word	0x00C0
 
-idt_48:
-    # 先设置一个空表
-    .word 0                 # limit = 0
-    .word 0, 0              # base = 0L
-
 msg:
     .byte 13, 10
-    .ascii "You've successfully load the floppy into RAM"
+    .ascii "You've successfully load the floppy data into RAM"
     .byte 13, 10, 13, 10
-
-.text
-endtext:
-.data
-enddata:
-.bss
-endbss:
 

@@ -293,9 +293,11 @@ static inline unsigned long _get_base(char *addr) {
     return __base;
 }
 
-// 取局部描述符中ldt所指段描述符中的基地址
+// 取局部描述符表中 ldt 所指段描述符中的基地址
 #define get_base(ldt) _get_base( ((char *)&(ldt)) )
 // 取段选择符segment指定的描述符中的限长值
+// 指令 lsl 是 Load Segment Limit 缩写。它从指定段描述符中取出分散的限长比特位拼成完整的段限长值放入指定寄存器中
+// 所得限长是实际字节数减1，因此还需要加1后才返回
 #define get_limit(segment) ({\
     unsigned long __limit; \
     __asm__ volatile("lsll %1, %0\n\tincl %0":"=r"(__limit):"r"(segment)); \

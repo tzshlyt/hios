@@ -101,7 +101,7 @@ ret_from_syscall:
 	pop %fs
 	pop %es
 	pop %ds
-	iret
+	iret									# 中断返回意味着进程0从内核态转换成用户态
 
 ### int32 - (int 0x20) 时钟中断处理程序。中断频率被设置为 100Hz。
 # 定时芯片 8253/8254 是在 kernel/sched.c 中初始化的。因此这里 jiffies 每 10ms 加 1.

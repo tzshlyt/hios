@@ -49,14 +49,27 @@ static inline int pause(void) {
 }
 
 // 移动到用户模式
+// 所使用的方法是模拟中断调用返回过程，即利用 iret 指令来实现特权级的变更和堆栈的切换
+// 压栈顺序与通常中断时硬件的压栈动作一样
+// 这里的 iret 并不会造成 cpu 去执行任务切换操作，因为在执行这个函数之前，标志位 NT 硬件在 sched_init() 中被复位了
+/*
+                   <-------- SP0-(TSS中的SS:ESP)
+        原ss
+        原esp
+        原eflags
+        原cs
+        原eip
+                    <------ SP1-iret指令执行前新的 SS:ESP
+ */
+//
 #define move_to_user_mode() \
 __asm__ ("movl %%esp,%%eax\n\t" /* 保存堆栈指针esp到eax寄存器中 */\
-	"pushl $0x17\n\t" /* 将堆栈段选择符(SS)入栈 */\
+	"pushl $0x17\n\t" /* 将堆栈段选择符(SS)入栈, (0x10111) 用户级别，从 LDT 中获得描述符, 从第3项(index=2)中获取描述符*/\
 	"pushl %%eax\n\t" /* 保存堆栈指针值(esp)入栈 */\
 	"pushfl\n\t" /* 将标志寄存器(eflags)内容入栈 */\
-	"pushl $0x0f\n\t" /* 将Task0 代码段选择符(cs)入栈 */\
+	"pushl $0x0f\n\t" /* 将Task0 代码段选择符(cs)入栈 (0x1111) 用户级别, 从 LDT 中获得描述符，从第2项中获取描述符 */\
 	"pushl $1f\n\t" /* 将下标号1的偏移地址(eip)入栈 */\
-	"iret\n" /* 中断返回，跳转到下标号1处 */ \
+	"iret\n" /* 中断返回, 引起系统移到任务0去执行，跳转到下标号1处, 把压栈的这些值恢复给后面执行的程序特权级就转为用户特权级 */ \
 	"1:\t movl $0x17, %%eax\n\t" /* 此处开始执行任务0 */\
 	"movw %%ax, %%ds\n\t" /* 初始化段寄存器指向本局部表数据段 */\
 	"movw %%ax, %%es\n\t" \
@@ -88,15 +101,19 @@ int main() {
     // 内存实验
     // mmtest_main();
 
-    // move_to_user_mode();
-    sys_debug("User mode can print string use this syscall");
+    // 在Linux 0.11中，除进程0外，所有进程都是由一个已有进程在用户态下完成创建的。
+    // 为了遵守这个规则，在进程0正式创建进程1之前，要将进程0由内核态转变为用户态，
+    // 方法是调用move_to_user_mode函数，模仿中断返回动作，实现进程0的特权级从内核态转变为用户态。
+    move_to_user_mode();
+    sys_debug("User mode can print string use this syscall\n");
 
-    // // fork still not work
-    // if(!fork()) {
-    //     while(1) sys_debug("User: Hello\n");
-    // }
-    // while(1) sys_debug("Kernel Hello\n");
-    // pause();
+    // fork still not work
+    if(!fork()) {   // fork() 返回1(子进程pid), !1为假，所以进程0继续执行 else 的代码
+        while(1)
+            sys_debug("User: Hello\n");
+    }
+    while(1)
+        sys_debug("Kernel Hello\n");
 }
 
 void init() {

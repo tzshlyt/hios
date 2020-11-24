@@ -33,7 +33,7 @@
 
 // 从 from 复制 1 页内存到 to 处( 4K 字节)
 #define copy_page(from, to) \
-    __asm__ volatile("cld; rep; movsl;":"S" (from), "D" (to), "c" (1024))
+    __asm__("cld ; rep ; movsl"::"S" (from),"D" (to),"c" (1024))
 
 #define invalidate() \
     __asm__ volatile("mov %%eax, %%cr3"::"a" (0))
@@ -315,19 +315,15 @@ void write_verify(unsigned long address) {
 // 在内核创建进程时，新进程与父进程被设置成共享代码和数据内存页面，并且所有这些
 // 页面均被设置成只读页面。而当新进程或原进程需要向内存页面写数据时，CPU就会检测
 // 到这个情况并产生页面写保护异常。于是在这个函数中内核就会首先判断要写的页面是
-// 否被共享。若没有则把页面设置成可写然后退出。若页面是出于共享状态，则需要重新
-// 申请一新页面并复制被写页面内容，以供写进程单独使用。共享被取消。本函数供下面
-// do_wp_page()调用。
+// 否被共享。
+// 若没有则把页面设置成可写然后退出。
+// 若页面是出于共享状态，则需要重新申请一新页面并复制被写页面内容，以供写进程单独使用, 共享被取消。
+// 本函数供 do_wp_page()调用。
 // 输入参数为页表项指针，是物理地址。[up_wp_page -- Un-Write Protect Page]
-// 解除页面的写入保护
-// 用于页异常中断过程中写保护异常处理（写时复制）
-// 本函数供 do_wp_page() 调用
-// 若页面没有共享，则把页面设置成可写，然后退出
-// 若页面共享状态，则需重新申请一新页面并复制被写页面内容,以供写进程单独使用，共享被取消
 void un_wp_page(unsigned long *table_entry) {
     unsigned long old_page, new_page;
-    // 首先取参数指定的页表项中物理页面位置(地址)并判断该页面是否是共享页面。如
-    // 果原页面地址大于内存低端LOW_MEM（表示在主内存区中），并且其在页面映射字节
+    // 首先取参数指定的页表项中物理页面位置(地址)并判断该页面是否是共享页面。
+    // 如果原页面地址大于内存低端LOW_MEM（表示在主内存区中），并且其在页面映射字节
     // 图数组中值为1（表示页面仅被引用1次，页面没有被共享），则在该页面的页表项
     // 中置R/W标志(可写),并刷新页变换高速缓冲，然后返回。即如果该内存页面此时只
     // 被一个进程使用，并且不是内核中的进程，就直接把属性改为可写即可，不用再重
@@ -344,8 +340,6 @@ void un_wp_page(unsigned long *table_entry) {
     // 面的页面映射字节数组递减1。然后将指定页表项内容更新为新页面地址，并置可读
     // 写等标志（U/S、R/W、P）。在刷新页变换高速缓冲之后，最后将原页面内容复制
     // 到新页面上。
-    // 申请一页空闲页面给执行写操作的进程单独使用，取消页面共享
-    // 在刷新页变换高速缓冲之后，最后将原页面内容复制到新页面上
     if (!(new_page = get_free_page()))
         oom();
 
@@ -354,7 +348,19 @@ void un_wp_page(unsigned long *table_entry) {
 
     *table_entry = new_page | 7;
     invalidate();
-    return;
+    copy_page(old_page, new_page);
+    // 页面内容拷贝后，进程A就可以在新的一页中完成压栈(写)动作了。
+    // A执行一段时间后轮到进程B，进程B仍然使用原页面，假设也要在原页面中写操作，
+    // 但是现在原页面的属性仍然是“只读”的，这一点在进程A创建进程B时就是这样设置的，
+    // 一直都没有改变过，所以在这种情况下，又需要进行页写保护处理，仍然是映射到un_wp_page函数中
+    // 由于原页面的引用计数已经被削减为1了，所以现在就要将原页面的属性设置为“可读可写”，然后函数返回。
+    // 实际上执行了两次 un_wp_page，
+    // 如果父进程A先写操作，父进程使用新页并将属性设置为可读写，子进程使用老页设置可读写并引用计数减1
+    // 反之子进程B先写操作，子进程使用新页并将属性设置为可读写，父进程使用老页设置可读写并引用计数减1
+    // 值得注意的是，页写保护是一个由系统执行的动作，在整个页写保护动作发生的过程中，
+    // 用户进程仍然正常执行，它并不知道自己在内存中被复制了，也不知道自己被复制到哪个页面了。
+    // 系统对用户进程的组织管理和协调，就表现在这里，用户进程能够正常执行是由系统保证的，
+    // 它自己并不需要知道系统是如何保证的。
 }
 
 // 当用户试图往一共享页上写时，该函数处理已存在的内存页面（写时复制）
@@ -375,7 +381,7 @@ void do_wp_page(unsigned long error_code, unsigned long address) {
     // 最后2位是线性地址低12位中的最高2位，也应屏蔽掉。因此求线性地址中页表项在
     // 页表中偏移地址直观一些的表示方法是(((address>>12)&ox3ff)<<2).
     // 2.(0xfffff000 & *((address>>20) &0xffc)):用于取目录项中页表的地址值；其中，
-    // ((address>>20) &0xffc)用于取线性地址中的目录索引项在目录表中的便宜地址。
+    // ((address>>20) &0xffc)用于取线性地址中的目录索引项在目录表中的偏移地址。
     // 因为address>>22是目录项索引值，但每项4个字节，因此乘以4后：(address>>22)<<2
     // = (address>>20)就是指定在目录表中的偏移地址。&0xffc用于屏蔽目录项索引值中
     // 最后2位。因为只移动了20位，因此最后2位是页表索引的内容，应该屏蔽掉。而
@@ -384,8 +390,9 @@ void do_wp_page(unsigned long error_code, unsigned long address) {
     // (0xfffff000 & *(unsigned log *) (((address>>22) & 0x3ff)<<2)).
     // 3.由1中页表项中偏移地址加上2中目录表项内容中对应页表的物理地址即可得到页
     // 表项的指针(物理地址)。这里对共享的页面进行复制。
-    un_wp_page((unsigned long *) ((((address >> 10) & 0xffc) +
-        ((*(unsigned long *)((address >> 20) & 0xffc)))) & 0xfffff000));
+    un_wp_page((unsigned long *)
+		(((address>>10) & 0xffc) + (0xfffff000 &
+		*((unsigned long *) ((address>>20) &0xffc)))));
 }
 
 // 执行缺页处理
@@ -447,6 +454,7 @@ void do_no_page(unsigned long error_code, unsigned long address) {
 
 */
 int copy_page_tables(unsigned long from, unsigned long to, unsigned long size) {
+    s_printk("copy_page_tables(0x%x, 0x%x, 0x%x)\n", from, to, size);
     unsigned long * from_page_table;
     unsigned long * to_page_table;
     unsigned long this_page;
@@ -515,7 +523,7 @@ int copy_page_tables(unsigned long from, unsigned long to, unsigned long size) {
             this_page = *from_page_table;
             if (!(1 & this_page))                               // 当前源页面没有使用，则不用复制
                 continue;
-            this_page &= (unsigned long)~2;                     // 置为可读
+            this_page &= (unsigned long)~2;                     // 置为可读, 进程A车机进程B后继续执行,A的压栈写操作引发页写保护 page_fault
             *to_page_table = this_page;
 
             // 如果该页表所指物理页面的地址在1MB以上，则需要设置内存页面映射数

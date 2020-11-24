@@ -67,7 +67,7 @@ void schedule(void) {
     // TODO: 先不考虑信号处理
 
     int i, next, c;
-    struct task_struct **p;
+    struct task_struct **p;         // 任务结构指针的指针
 
     // 从后往前遍历任务，找到就绪任务剩余执行时间counter最大的任务，切换并运行
     while (1) {
@@ -75,24 +75,28 @@ void schedule(void) {
         next = 0;
         i = NR_TASKS;
         p = &task[NR_TASKS];
+        // 这段代码也是从任务数组的最后一个任务开始循环处理，并跳过不含任务的数组槽。
+        // 比较每个就绪状态任务的counter (任务运行时间的递减滴答计数)值，哪一个值大，说明运行时间还不长，
+        // next就指向哪个的任务号。
         while (--i) {
             if (!*(--p))            // 跳过不含任务的数组槽
                 continue;
-            if ((*p)->state == TASK_RUNNING && (*p)->counter > c) {     // 找出任务运行时间的递减滴答计数最大的，运行时间不长
+            if ((*p)->state == TASK_RUNNING && (*p)->counter > c) {  // 找出任务运行时间的递减滴答计数最大的，运行时间不长
                 c = (*p)->counter;
                 next = i;
             }
         }
-        // 如果有任务 counter > 0 或者没有可运行的任务，则退出
-        // 否则根据每个任务的优先值，更新每个任务的 counter 值，然后重新比较，注意这里计算不考虑进程的状态
-        if (c) break;
-        for( p = &LAST_TASK; p > &FIRST_TASK; p--) {
-            if (!*p) {
+        // 如果有任务 counter > 0 或者没有可运行的任务，此时 c 仍然等于-1，next = 0，则退出
+        // 否则根据每个任务的优先值，更新每个任务的 counter 值，然后重新比较,
+        // counter 值的计算方式为 counter = counter/2 + priority，注意这里计算不考虑进程的状态
+        if (c) break;               // 注意: if(-1) 返回 true
+        for(p = &LAST_TASK; p > &FIRST_TASK; p--) {
+            if (*p) {
                 (*p)->counter = ((*p)->counter >> 1) + (*p)->priority;
             }
         }
     }
-
+    // s_printk("Scheduler select task %d\n", next);
     // 若没有任务可运行时，next为0，会去执行任务0。此时任务0仅执行pause()系统调用，并又会调用本函数
     switch_to(next);
 }
@@ -143,6 +147,11 @@ repeat: current->state = TASK_INTERRUPTIBLE;
 // 将导致进程进入睡眠状态，直到收到一个信号。该信号用于终止进程或使进程调用一个信号捕获函数。
 // 只有当捕获一个信号，并且信号捕获处理函数返回时，pause() 才返回。此时pause()返回值应该是-1，并且errno被置为EINTR
 // 这里还没有完全实现直到(直到0.95版)
+// 可中断等待状态与不可中断等待状态它是有所区别的，将进程设置成可中断等待状态意味着，
+// 如果产生某种中断，或其他进程给这个进程发送特定信号等，仍然有可能将这个进程的状态改设为就绪状态，
+// 使之仍然具备运行的能力。这种意义，适用于Linux0.11中的全部进程。
+// 不可中断等待状态: 只有内核代码中明确表示将该进程设置为就绪状态，它才能被唤醒。
+// 除此之外，没有任何办法将其唤醒。
 int sys_pause(void) {
     current->state = TASK_INTERRUPTIBLE;
     schedule();
@@ -156,20 +165,21 @@ int sys_pause(void) {
 int counter = 0;
 long volatile jiffies = 0;
 void do_timer(long cpl) {
+    // s_printk("tick! %d   %d\n",  cpl, jiffies);
     // counter++;
     // if(counter == 10){
     //     printk("CPL = %d Jiffies = %d\n", cpl, jiffies);
     //     counter = 0;
     // }
-    if (!cpl) {
-        current->stime++;   // 系统运行时间
-    } else {
-        current->utime++;   // 用户运行时间
-    }
-    if ((--current->counter) > 0) return;   // 如果进程运行时间还没完，则退出。
-    current->counter = 0;
-    if(!cpl) return;                        // 内核程序，不依赖 counter 进行调度
-    schedule();                             // 执行调度
+    // if (!cpl) {
+    //     current->stime++;   // 系统运行时间
+    // } else {
+    //     current->utime++;   // 用户运行时间
+    // }
+    // if ((--current->counter) > 0) return;   // 如果进程运行时间还没完，则退出。
+    // current->counter = 0;
+    // if(!cpl) return;                        // 内核程序，不依赖 counter 进行调度
+    // schedule();                             // 执行调度
 }
 
 // 内核调度程序的初始化子程序

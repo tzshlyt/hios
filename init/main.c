@@ -9,6 +9,7 @@
 // Use to debug serial
 #include <serial_debug.h>
 
+extern void init(void);
 extern void trap_init(void);
 extern void video_init(void);
 extern void sched_init(void);
@@ -88,10 +89,10 @@ int main() {
     video_init();
     trap_init();
     sched_init();
-    printk("Welcome to Linux0.1 Kernel Mode(NO)\n");
+    // printk("Welcome to Linux0.1 Kernel Mode(NO)\n");
 
     // 初始化物理页内存, 将 1MB - 16MB 地址空间的内存进行初始
-    mem_init(0x100000, 0x1000000);
+    mem_init(0x100000, 0x300000);
 
     // 中断实验
     sti(); // 开启中断
@@ -109,13 +110,26 @@ int main() {
 
     // fork still not work
     if(!fork()) {   // fork() 返回1(子进程pid), !1为假，所以进程0继续执行 else 的代码
-        while(1)
-            sys_debug("User: Hello\n");
+        // while(1)
+            sys_debug("B\n");
+    } else {
+        sys_debug("A\n");
     }
-    while(1)
-        sys_debug("Kernel Hello\n");
+
+    // 在Linux0.11的进程调度机制中，有两种情况可以产生进程切换。
+    // 一种情况是:由于进程运行的时间到了，于是进行切换。每个进程在创建时，都被赋予有限的时间片，
+    // 以此保证所有进程每次都只执行有限的时间。一旦当前进程的时间片被削减为0了，就说明这个进程此次执行的时间用完了，
+    // 只要它是处于用户态，就立即切换到其他进程去执行，以此来保证多进程能够轮流执行。
+    // 另一种情况是:由于逻辑执行需要被打断了，于是进程切换。当一个进程处于内核态时，它下一步确实已经没有事务要处理了，
+    // 或者它下一步要处理的事务需要外设提供的数据来支持，等等，在这种情况下，该进程就不再具备进一步执行的“逻辑条件”了，
+    // 如果还等着时钟中断产生后再切换到别的进程去执行，就是在无谓地浪费时间，于是它将被立即切换到其他进程去执行。
+    // 进程 0 切换到进程 1 表现为第二种情况
+    // pause系统调用会把任务 0 转换成可中断等待状态，再执行调度函数, 就行进程切换。但是调度函数只要发现系统中
+    // 没有其他任务可以运行是就会切换到任务0，而不依赖于任务 0 的状态。
+    for(;;) pause();
 }
 
 void init() {
+    sys_debug("User: Hello\n");
     while(1);
 }

@@ -2,6 +2,11 @@
  * 实现系统调用过程
  * 使用中断调用 int 0x80 和放在 eax 中的功能号来使用内核提供各种功能服务
  *
+ * Linus原注释中的一般中断过程是指除了系统调用中断(int 0x80)和时钟中断(int 0x20)以外的其他中断。
+ * 这些中断会在内核态或用户态随机发生，若在这些中断过程中也处理信号识别的话，
+ * 就有可能与系统调用中断和时钟中断过程中对信号的识别处理过程相冲突，违反了内核代码非抢占原则。
+ * 因此系统既无必要在这些“其他”中断中处理信号，也不允许这样做。
+ *
  * Stack layout in 'ret_from_system_call':
  *
  *	 0(%esp) - %eax
@@ -40,6 +45,11 @@ nr_system_calls = 72 + 1 # sys_debug
 # 以下是任务结构（task_struct）中变量偏移值，参见 sched.h
 state = 0				# 进程状态码
 counter = 4				# 任务运行时间计数（递减）（滴答数），运行时间片
+priority = 8    		# 运行优先数。任务开始运行时counter=priority,越大则运行时间越长
+signal	= 12    		# 是信号位图，每个bit代表一种信号，信号值=位偏移值+1
+sigaction = 16			# MUST be 16 (=len of sigaction),
+						# 信号执行属性结构数组的偏移量，对应信号将要执行的操作和标志信息。
+blocked = (33*16)   	# 受阻塞信号位图的偏移量
 
 
 ### 错误的系统调用号
@@ -89,12 +99,39 @@ system_call:
 	je reschedule
 
 # 由于在执行 jmp schedule 之前把返回地址 ret_from_syscall 入栈，因此执行完 schedule() 后最终会返回到 ret_from_syscall 继续执行
-# 从系统调用c函数返回后，对信号进行识别处理
-# 其它中断服务程序退出时也将跳转到这里进行处理后才退出中断过程
+# 从系统调用c函数返回后，对信号进行识别处理其它中断服务程序退出时也将跳转到这里进行处理后才退出中断过程
 # 例如后面的处理器出错中断 int 16.
 ret_from_syscall:
-	# TODO 暂时不处理信号
-	popl %eax								# eax 中含有上面入栈系统调用的返回值
+	# 首先判别当前任务是否是初始任务task0,如果是则不比对其进行信号量方面的处理，直接返回。
+	movl current, %eax
+	cmpl task, %eax
+	je 3f
+	# 通过对原调用程序代码选择符的检查来判断调用程序是否是用户任务。如果不是则直接退出中断。
+	# 这是因为任务在内核态执行时不可抢占。否则对任务进行信号量的识别处理。
+	# 这里比较选择符是否为用户代码段的选择符0x000f(RPL=3,局部表，第一个段(代码段))来判断是否为用户任务。
+	# 如果不是则说明是某个中断服务程序跳转到上面的，于是跳转退出中断程序。
+	# 如果原堆栈段选择符不为0x17(即原堆栈不在用户段中)，也说明本次系统调用的调用者不是用户任务，则也退出。
+	cmpw $0x0f, CS(%esp)
+	jne 3f
+	cmpw $0x17, OLDSS(%esp)
+	jne 3f
+	# 下面这段代码用于处理当前任务中的信号。首先取当前任务结构中的信号位图(32位，每位代表1种信号)，
+	# 然后用任务结构中的信号阻塞(屏蔽)码，阻塞不允许的信号位，取得数值最小的信号值，
+	# 再把原信号位图中该信号对应的位复位(置0)，最后将该信号值作为参数之一调用do_signal().
+	# do_signal() 在kernel/signal.c中，其参数包括13个入栈信息。
+	movl signal(%eax),%ebx          # 取信号位图→ebx,每1位代表1种信号，共32个信号
+	movl blocked(%eax),%ecx         # 取阻塞(屏蔽)信号位图→ecx
+	notl %ecx                       # 每位取反
+	andl %ebx,%ecx                  # 获得许可信号位图
+	bsfl %ecx,%ecx                  # 从低位(位0)开始扫描位图，看是否有1的位，若有，则ecx保留该位的偏移值
+	je 3f                           # 如果没有信号则向前跳转退出
+	btrl %ecx,%ebx                  # 复位该信号(ebx含有原signal位图)
+	movl %ebx,signal(%eax)          # 重新保存signal位图信息→current->signal.
+	incl %ecx                       # 将信号调整为从1开始的数(1-32)
+	pushl %ecx                      # 信号值入栈作为调用do_signal的参数之一
+	call do_signal                  # 调用C函数信号处理程序(kernel/signal.c)
+	popl %eax                       # 弹出入栈的信号值
+3:	popl %eax						# eax 中含有上面入栈系统调用的返回值
 	popl %ebx
 	popl %ecx
 	popl %edx

@@ -17,4 +17,6 @@ void panic(const char *str);
 
 extern int video_x, video_y;
 
+#define suser() (current->euid == 0)
+
 #endif

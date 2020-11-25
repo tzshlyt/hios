@@ -3,51 +3,24 @@
 
 #include <linux/kernel.h>
 #include <linux/sched.h>
-#include <linux/unistd.h>
+#include <unistd.h>
 #include <asm/system.h>
 #include <asm/io.h>
 // Use to debug serial
 #include <serial_debug.h>
 
-extern void init(void);
 extern void trap_init(void);
 extern void video_init(void);
 extern void sched_init(void);
 extern void mem_init(unsigned long start_mem, unsigned long end_mem);
+void init(void);
 
 static inline int fork(void) __attribute__((always_inline));
 static inline int pause(void) __attribute__((always_inline));
 static inline int sys_debug(char *str) __attribute__((always_inline));
-
-static inline int fork(void) {
-    long __res;
-    __asm__ volatile("int $0x80\n\t"
-            :"=a" (__res)
-            :"0" (__NR_fork));
-    if( __res >= 0)
-        return (int) __res;
-    return -1;
-}
-
-static inline int sys_debug(char *str) {
-    long __res;
-    __asm__ volatile("int $0x80\n\t"
-            :"=a" (__res)
-            :"0" (__NR_sys_debug), "b" ((long)(str)));
-    if (__res >= 0)
-        return (int) __res;
-    return -1;
-}
-
-static inline int pause(void) {
-    long __res;
-    __asm__ volatile("int $0x80\n\t"
-            :"=a" (__res)
-            :"0" (__NR_pause));
-    if( __res >= 0)
-        return (int) __res;
-    return -1;
-}
+static inline _syscall0(int, fork)
+static inline _syscall0(int, pause)
+static inline _syscall1(int, sys_debug, char *, str)
 
 // 移动到用户模式
 // 所使用的方法是模拟中断调用返回过程，即利用 iret 指令来实现特权级的变更和堆栈的切换
@@ -79,9 +52,8 @@ __asm__ ("movl %%esp,%%eax\n\t" /* 保存堆栈指针esp到eax寄存器中 */\
 	:::"ax");
 
 int mmtest_main(void);
-
-typedef unsigned long size_t;
-int snprintf(char *str, size_t size, const char *fmt, ...);
+void signal_demo_main(void);
+void sched_abcd_demo(void);
 
 int main() {
     video_init();
@@ -108,7 +80,14 @@ int main() {
 
     // fork still not work
     if(!fork()) {   // fork() 返回1(子进程pid), !1为假，所以进程0继续执行 else 的代码
-        init();
+        // 进程 1
+        if(!fork()) {
+            // 进程 2
+            sched_abcd_demo();
+        } else {
+            signal_demo_main();
+        }
+        while(1);
     }
 
     // 在Linux0.11的进程调度机制中，有两种情况可以产生进程切换。
@@ -134,4 +113,26 @@ void init() {
         while(1)
             sys_debug("B");
     }
+}
+
+void sched_abcd_demo() {
+    // Here init process (pid = 1) will
+    // print AABB randomly
+    if(!fork()) {
+        while(1);
+            // sys_debug("A\n");
+    }
+    if(!fork()) {
+        while(1);
+            // sys_debug("B\n");
+    }
+    if(!fork()) {
+        while(1);
+            // sys_debug("C\n");
+    }
+    if(!fork()) {
+        while(1);
+            // sys_debug("D\n");
+    }
+    while(1);
 }

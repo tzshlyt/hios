@@ -87,7 +87,3 @@ void s_printk(char *fmt, ...) {
     }
     return;
 }
-
-void s_printldt(const char* ldt) {
-
-}

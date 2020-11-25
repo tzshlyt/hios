@@ -65,7 +65,6 @@ void sleep_on(struct task_struct **p) {
 
 void schedule(void) {
     // TODO: 先不考虑信号处理
-
     int i, next, c;
     struct task_struct **p;         // 任务结构指针的指针
 
@@ -78,7 +77,7 @@ void schedule(void) {
         // 这段代码也是从任务数组的最后一个任务开始循环处理，并跳过不含任务的数组槽。
         // 比较每个就绪状态任务的counter (任务运行时间的递减滴答计数)值，哪一个值大，说明运行时间还不长，
         // next就指向哪个的任务号。
-        while (--i) {
+        while (--i) {               // 跳过任务 0
             if (!*(--p))            // 跳过不含任务的数组槽
                 continue;
             if ((*p)->state == TASK_RUNNING && (*p)->counter > c) {  // 找出任务运行时间的递减滴答计数最大的，运行时间不长
@@ -90,7 +89,7 @@ void schedule(void) {
         // 否则根据每个任务的优先值，更新每个任务的 counter 值，然后重新比较,
         // counter 值的计算方式为 counter = counter/2 + priority，注意这里计算不考虑进程的状态
         if (c) break;               // 注意: if(-1) 返回 true
-        for(p = &LAST_TASK; p > &FIRST_TASK; p--) {
+        for(p = &LAST_TASK; p > &FIRST_TASK; p--) {    // 跳过任务 0
             if (*p) {
                 (*p)->counter = ((*p)->counter >> 1) + (*p)->priority;
             }
@@ -165,21 +164,20 @@ int sys_pause(void) {
 int counter = 0;
 long volatile jiffies = 0;
 void do_timer(long cpl) {
-    // s_printk("tick! %d   %d\n",  cpl, jiffies);
     // counter++;
     // if(counter == 10){
     //     printk("CPL = %d Jiffies = %d\n", cpl, jiffies);
     //     counter = 0;
     // }
-    // if (!cpl) {
-    //     current->stime++;   // 系统运行时间
-    // } else {
-    //     current->utime++;   // 用户运行时间
-    // }
-    // if ((--current->counter) > 0) return;   // 如果进程运行时间还没完，则退出。
-    // current->counter = 0;
-    // if(!cpl) return;                        // 内核程序，不依赖 counter 进行调度
-    // schedule();                             // 执行调度
+    if (!cpl) {
+        current->stime++;   // 系统运行时间
+    } else {
+        current->utime++;   // 用户运行时间
+    }
+    if ((--current->counter) > 0) return;   // 如果进程运行时间还没完，则退出。
+    current->counter = 0;
+    if(!cpl) return;                        // 内核程序，不依赖 counter 进行调度
+    schedule();                             // 执行调度
 }
 
 // 内核调度程序的初始化子程序

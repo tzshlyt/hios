@@ -84,8 +84,6 @@ typedef unsigned long size_t;
 int snprintf(char *str, size_t size, const char *fmt, ...);
 
 int main() {
-    int ret;
-    char str[1000] = "";
     video_init();
     trap_init();
     sched_init();
@@ -110,10 +108,7 @@ int main() {
 
     // fork still not work
     if(!fork()) {   // fork() 返回1(子进程pid), !1为假，所以进程0继续执行 else 的代码
-        // while(1)
-            sys_debug("B\n");
-    } else {
-        sys_debug("A\n");
+        init();
     }
 
     // 在Linux0.11的进程调度机制中，有两种情况可以产生进程切换。
@@ -130,6 +125,13 @@ int main() {
 }
 
 void init() {
-    sys_debug("User: Hello\n");
-    while(1);
+    // pid = 1
+    // 为什么不在进程0和进程1中打印，因为schedule()跳过进程0
+    if(!fork()) {
+        while(1)
+            sys_debug("A");
+    } else {
+        while(1)
+            sys_debug("B");
+    }
 }

@@ -12,6 +12,12 @@
 extern int timer_interrupt(void);
 extern int system_call(void);
 
+// 该宏取信号nr在信号位图中对应位的二进制数值。信号编号1-32.比如信号5的位图
+// 数值等于 1 <<(5-1) = 16 = 00010000b
+#define _S(nr) (1<<((nr)-1))
+// 除了SIGKILL 和 SIGSTOP 信号以外其他信号都是可阻塞的(...1011,1111,1110,1111,111b)
+#define _BLOCKABLE (~(_S(SIGKILL) | _S(SIGSTOP)))
+
 // 定义任务联合体
 // 每个任务(进程)在内核态运行时都有自己的内核态堆栈。这里定义了任务的内核态堆栈结构
 // 因为一个任务的数据结构与其内核态堆栈在同一内存页中，所以从堆栈段寄存器ss可以获得其数据段选择符
@@ -64,9 +70,31 @@ void sleep_on(struct task_struct **p) {
 }
 
 void schedule(void) {
-    // TODO: 先不考虑信号处理
     int i, next, c;
     struct task_struct **p;         // 任务结构指针的指针
+
+    // 进入schedule函数后，先对所有进程进行第-次遍历信号检测，
+    // 如果发现哪个进程接收到了指定的信号，而且该进程还是可中断等待状态，那么就将该进程设置为就绪状态。
+    // 如果进程处于不可中断等待状态，即使它收到了信号，状态也不会改变。
+    // 从任务数组中最后一个任务开始循环检测 alarm。在循环时跳过空指针项。
+    for(p = &LAST_TASK; p > &FIRST_TASK; --p) {
+        if (*p) {
+            // 如果设置过任务的定时值alarm，并且已经过期(alarm<jiffies)，则在
+            // 信号位图中置SIGALRM信号，即向任务发送SIGALARM信号。然后清alarm。
+            // 该信号的默认操作是终止进程。jiffies是系统从开机开始算起的滴答数(10ms/滴答)。
+            if ((*p)->alarm && (*p)->alarm < jiffies) {
+                (*p)->signal |= (1 << (SIGALRM-1));
+                (*p)->alarm = 0;
+            }
+            // 如果信号位图中除被阻塞的信号外还有其他信号，并且任务处于可中断状态，
+            // 则置任务为就绪状态。其中'~(_BLOCKABLE & (*p)->blocked)'用于忽略被阻塞的信号，
+            // 但 SIGKILL 和 SIGSTOP 不能被阻塞。
+            if((unsigned long)((*p)->signal) & (unsigned long)(~((unsigned long)(_BLOCKABLE) & ((*p)->blocked))
+                        && (unsigned long)((*p)->state) == TASK_INTERRUPTIBLE)) {
+                (*p)->state = TASK_RUNNING;
+            }
+        }
+    }
 
     // 从后往前遍历任务，找到就绪任务剩余执行时间counter最大的任务，切换并运行
     while (1) {

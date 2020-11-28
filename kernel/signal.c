@@ -93,6 +93,36 @@ void do_signal(long signr,long eax, long ebx, long ecx, long edx,
     put_fs_long((unsigned long)eflags, tmp_esp++);
     put_fs_long((unsigned long)old_eip, tmp_esp++);
     current->blocked |= sa->sa_mask;        // 进程阻塞码(屏蔽码)添加上 sa_mask 中的码位
+    // 这些代码全部都是向用户栈空间备份数据
+    /*
+
+            |----------------|
+            |   用户栈空间     |
+            |----------------|
+            |   old_eip      |
+            |----------------|
+            |   edx          |
+            |----------------|
+            |   ecx          |
+            |----------------|
+            |   eax          |
+            |----------------|
+            |   blocked      |
+            |----------------|
+            |  signr         |
+            |----------------|
+            |   ss_restorer  |
+            |----------------|
+
+        信号处理函数执行完毕后，-定会执行“ret"这一行代码，于是此时处于栈顶的 sa->sa_restorer
+        所代表的函数地址值就发挥作用了，ret 的本质就是用栈顶指针的地址值来设置EIP,然后跳转到EIP指向的地址位置去执行。
+        此时就应该跳转到sa->sa_restorer 所代表的函数地址值位置去执行了。这个库函数将来会在信号处理工作结束后
+        恢复用户进程执行的“指令和数据”，并最终跳转到用户程序的“中断位置”处执行。
+        注意看sa_restorer最后一行汇编“ret",由于ret的本质就是用当前栈顶的值设置EIP,并使程序跳转到EIP指向的位置去执行，
+        很显然，经过一系列清栈操作后，当前栈顶的数值就是“put fs_long(old_ eip,tmp esp++)”这行代码设置的，
+        这个old eip 是产生软中断int0x80的下一行代码（中断返回前处理信号）。
+        所以，ret 执行后，信号就处理完毕了，并最终回到用户程序中继续执行。
+    */
 }
 
 // 获取当前任务信号屏蔽位图(屏蔽码或阻塞码)。sgetmask可分解为signal-get-mask。以下类似。

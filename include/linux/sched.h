@@ -87,7 +87,7 @@ struct task_struct {
 
     long signal;                        // 信号，是位图，每个比特代表一种信号，信号值=位偏移值+1
     struct sigaction sigaction[32];     // 信号执行属性结构，对应信号将要执行的操作和标志信息
-    long blocked;                       // 进程信号屏蔽码（对应信号位图）
+    unsigned long blocked;              // 进程信号屏蔽码（对应信号位图）
 	// --- 硬编码部分结束 ---
     int exit_code;                      // 退出码，其父进程会取
     unsigned long start_code;           // 代码段地址
@@ -210,7 +210,7 @@ __asm__ volatile("cmpl %%ecx, current\n\t" /* 任务n是当前任务吗？（cur
         "je 1f\n\t" /* 是，则什么都不做，退出*/ \
         "movw %%dx, %1\n\t" /* 将新任务TSS的16位选择符存入__tmp.b中 */ \
         "xchgl %%ecx, current\n\t" /* current = task[n]; ecx = 被切换出的任务 */ \
-        "ljmp *%0\n\t" /* 长跳跃到新的TSS选择符，表示任务切换 */ \
+        "ljmp *%0\n\t" /* 长跳跃到新的TSS选择符 *&__temp，造成任务切换 */ \
         "cmpl %%ecx, last_task_used_math\n\t" /* 原任务上次使用过协处理器吗 */ \
         "jne 1f\n\t" /* 没有则跳转，退出 */ \
         "clts\n\t" /* 使用过，则清cr0中的任务切换标志TS */ \

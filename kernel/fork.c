@@ -4,22 +4,41 @@
 #include <asm/system.h>
 #include <linux/mm.h>
 #include <linux/kernel.h>
+#include <serial_debug.h>
 
 
 extern void write_verify(unsigned long address);
 
 long last_pid = 0;		// 最新进程号，其值会由 get_empty_process() 生成
 
-// 空间区域写前验证
-// 80486以上cup可以通过控制寄存器CR0达到本函数目的
+// 进程空间区域写前验证函数
+// 对于80386 CPU，在执行特权级 0 代码时不会理会用户空间中的页面是否是也保护的，
+// 因此在执行内核代码时用户空间中数据页面来保护标志起不了作用，写时复制机制
+// 也就失去了作用。verify_area()函数就用于此目的。但对于80486或后来的CPU，其
+// 控制寄存器 CRO 中有一个写保护标志WP(位16)，内核可以通过设置该标志来禁止特权
+// 级0的代码向用户空间只读页面执行写数据，否则将导致发生写保护异常。
+// 从而486以上CPU可以通过设置该标志来达到本函数的目的。
+// 该函数对当前进程逻辑地址从addr到addr+size这一段范围以页为单位执行写操作前
+// 的检测操作。由于检测判断是以页面为单位进行操作，因此程序首先需要找出addr所
+// 在页面开始地址start，然后start加上进程数据段基址，使这个start变成CPU 4G线性
+// 空间中的地址。最后循环调用write_verify()对指定大小的内存空间进行写前验证。
+// 若页面是只读的，则执行共享检验和复制页面操作。
 void verify_area(void *addr, unsigned int size) {
 	unsigned long start;
+
+	// 首先将起始地址start调整为其所在左边界开始位置，同时相应地调整验证区域大小。
+    // 下句中的 start & 0xfff 用来获得指定起始位置addr(也即start)在所在
+    // 页面中的偏移值，原验证范围 size 加上这个偏移值即扩展成以 addr 所在页面起始
+    // 位置开始的范围值。因此在下面也需要把验证开始位置 start 调整成页面边界值。
 	start = (unsigned long) addr;
 	size += start & 0xfff;			// 获得指定起始位置addr在所在页面中的偏移值
 	start &= 0xfffff000;			// 此时 start 是当前进程空间中的逻辑地址
 
+    // 下面 start 加上进程数据段在线性地址空间中的起始基址，变成系统整个线性空间
+    // 中的地址位置。对于linux-0.11内核，其数据段和代码在线性地址空间中的基址
+    // 和限长均相同。
 	start += get_base(current->ldt[2]);
-	while (size) {
+	while ((long)size > 0) {
 		size -= 4096;
 		write_verify(start);
 		start += 4096;
@@ -179,6 +198,7 @@ int copy_process(int nr,long ebp,long edi,long esi,long gs,long none,
 	// 	current->executable->i_count++;
 
 	// 把进程1的任务状态描述符表 和局部描述符表挂接在全局描述符表中，
+	// 标志着系统从此具备操作新进程的能力
 	// 随后GDT表中设置新任务 TSS 段和 LDT 段描述符项。这两个段的限长均被设置成104字节。
     // set_tss_desc() 和 set_ldt_desc() 在 system.h 中定义。"gdt+(nr<<1)+FIRST_TSS_ENTRY"是
     // 任务 nr 的TSS描述符项在全局表中的地址。因为每个任务占用GDT表中2项，

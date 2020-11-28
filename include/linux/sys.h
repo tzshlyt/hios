@@ -8,12 +8,15 @@ extern int sys_pause();
 extern int stub_syscall();
 extern int serial_debugstr(char *str);
 extern int sys_kill(int pid, int sig);
+extern int sys_sigaction(int signum, struct sigaction *action, struct sigaction *old_action);
+extern int sys_sgetmask(void);
+extern int sys_ssetmask(int newMask);
 
 //TODO 目前除了少数syscall之外其余的syscall均为stub状态
 fn_ptr sys_call_table[] = {
     stub_syscall, // 0
     stub_syscall,
-    sys_fork,
+    sys_fork,     // 2
     stub_syscall,
     stub_syscall,
     stub_syscall,
@@ -40,7 +43,7 @@ fn_ptr sys_call_table[] = {
     stub_syscall,
     stub_syscall,
     stub_syscall,
-    sys_pause,
+    sys_pause,    // 29
     stub_syscall, // 30
     stub_syscall,
     stub_syscall,
@@ -48,7 +51,7 @@ fn_ptr sys_call_table[] = {
     stub_syscall,
     stub_syscall,
     stub_syscall,
-    sys_kill,
+    sys_kill,     // 37
     stub_syscall,
     stub_syscall,
     stub_syscall, // 40
@@ -78,9 +81,9 @@ fn_ptr sys_call_table[] = {
     stub_syscall,
     stub_syscall,
     stub_syscall,
-    stub_syscall,
-    stub_syscall,
-    stub_syscall,
+    sys_sigaction, // 67
+    sys_sgetmask,
+    sys_ssetmask,
     stub_syscall, // 70
     stub_syscall,
     serial_debugstr

@@ -6,6 +6,9 @@
 #define __NR_fork 2
 #define __NR_pause 29
 #define __NR_kill 37
+#define __NR_sigaction 67
+#define __NR_sgetmask 68
+#define __NR_ssetmask 69
 #define __NR_sys_debug 72
 
 /* 例如

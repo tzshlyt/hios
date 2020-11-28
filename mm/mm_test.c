@@ -5,6 +5,7 @@
 
 #include <linux/kernel.h>
 #include <linux/mm.h>
+#include <serial_debug.h>
 
 #define invalidate() \
     __asm__ volatile("mov %%eax, %%cr3"::"a" (0))
@@ -76,16 +77,15 @@ void mm_read_only(unsigned long addr) {
 
 void mm_print_pageinfo(unsigned long addr) {
     unsigned long *pte = linear_to_pte(addr);
-    printk("Linear addr: 0x%x, PTE addr = 0x%x. Flags[ ", addr, pte);
-    if(*pte & 0x1) printk("P ");
-    if(*pte & 0x2) printk("R/W ");
-    else printk("RO ");
-    if(*pte & 0x4) printk("U/S ");
-    else printk("S ");
-    printk("]\n");
-    printk("Phyaddr = %x\n", (*pte & 0xfffff000));
+    s_printk("Linear addr: 0x%x, PTE addr = 0x%x. Flags[ ", addr, pte);
+    if(*pte & 0x1) s_printk("P ");
+    if(*pte & 0x2) s_printk("R/W ");
+    else s_printk("RO ");
+    if(*pte & 0x4) s_printk("U/S ");
+    else s_printk("S ");
+    s_printk("]\n");
+    s_printk("Phyaddr = %x\n", (*pte & 0xfffff000));
 }
-
 
 int mmtest_main(void) {
     printk("Running Memory function tests\n");

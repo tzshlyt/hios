@@ -186,5 +186,4 @@ sys_fork:
 	pushl %eax
 	call copy_process		# 在 fork.c 中
 	addl $20, %esp			# 丢弃这里所有压栈内容
-
-1: ret
+1: 	ret

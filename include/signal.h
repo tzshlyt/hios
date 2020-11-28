@@ -90,6 +90,6 @@ int sigprocmask(int how, sigset_t *set, sigset_t *oldset);
 // 若捕捉到某一信号并从该信号处理程序中返回，则该函数也返回，并且信号屏蔽码会恢复到调用前的值。
 int sigsuspend(sigset_t *sigmask);
 // 改变对于某个信号 sig 的处理句柄
-int sigaction(int sig, struct sigaction *act, struct sigaction *oldact);
+// int sigaction(int sig, struct sigaction *act, struct sigaction *oldact);
 
 #endif

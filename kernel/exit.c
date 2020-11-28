@@ -13,7 +13,7 @@
 // 该函数首先判断参数的正确性，然后判断条件是否满足。
 // 如果满足就向指定进程发送信号sig并退出，否则返回为许可错误号。
 static inline int send_sig(long sig, struct task_struct* p, int priv) {
-    s_printk("send_sig entered sig:%d\n", sig);
+    s_printk("send_sig entered sig = %d\n", sig);
     // First check params
     if (!p || sig < 1 || sig > 32)
         return -EINVAL;
@@ -39,7 +39,7 @@ static inline int send_sig(long sig, struct task_struct* p, int priv) {
 // 表明当前进程是进程组组长，因此需要向所有组内进程强制发送信号sig.
 // sys_kill 为系统调用 kill 的入口点
 int sys_kill(int pid, int sig) {
-    s_printk("sys_kill entered pid:%d sig:%d\n", pid, sig);
+    s_printk("sys_kill entered pid = %d, sig = %d\n", pid, sig);
     struct task_struct **p = task + NR_TASKS;
     int err, retval = 0;
     if (pid > 0) {
@@ -53,5 +53,6 @@ int sys_kill(int pid, int sig) {
             }
         }
     }
+    s_printk("sys_kill leaved, retval = %d\n", retval);
     return retval;
 }

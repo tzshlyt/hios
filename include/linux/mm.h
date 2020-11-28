@@ -8,5 +8,6 @@
 /* extern */ void free_page(unsigned long addr);
 /* extern */ void calc_mem(void);
 void do_no_page(unsigned long error_code, unsigned long address);
+void mm_print_pageinfo(unsigned long addr);
 
 #endif

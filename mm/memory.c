@@ -24,6 +24,7 @@
 #include <linux/kernel.h>
 #include <linux/head.h>
 #include <serial_debug.h>
+#include <linux/mm.h>
 
 #define LOW_MEM 0x100000ul                      // 内存低1MB，是系统代码所在
 #define PAGING_MEMORY (15*1024*1024)            // 分页内存15MB，主内存区最多15M
@@ -314,13 +315,13 @@ void write_verify(unsigned long address) {
 // 取消写保护页面函数。用于页异常中断过程中写保护异常的处理(写时复制)。
 // 在内核创建进程时，新进程与父进程被设置成共享代码和数据内存页面，并且所有这些
 // 页面均被设置成只读页面。而当新进程或原进程需要向内存页面写数据时，CPU就会检测
-// 到这个情况并产生页面写保护异常。于是在这个函数中内核就会首先判断要写的页面是
-// 否被共享。
+// 到这个情况并产生页面写保护异常。于是在这个函数中内核就会首先判断要写的页面是否被共享。
 // 若没有则把页面设置成可写然后退出。
 // 若页面是出于共享状态，则需要重新申请一新页面并复制被写页面内容，以供写进程单独使用, 共享被取消。
-// 本函数供 do_wp_page()调用。
-// 输入参数为页表项指针，是物理地址。[up_wp_page -- Un-Write Protect Page]
+// 本函数供 do_wp_page() 调用。
+// table_entry: 为页表项物理地址。[up_wp_page -- Un-Write Protect Page]
 void un_wp_page(unsigned long *table_entry) {
+    s_printk("un_wp_page(0x%x) ", table_entry);
     unsigned long old_page, new_page;
     // 首先取参数指定的页表项中物理页面位置(地址)并判断该页面是否是共享页面。
     // 如果原页面地址大于内存低端LOW_MEM（表示在主内存区中），并且其在页面映射字节
@@ -329,7 +330,9 @@ void un_wp_page(unsigned long *table_entry) {
     // 被一个进程使用，并且不是内核中的进程，就直接把属性改为可写即可，不用再重
     // 新申请一个新页面。
     old_page = *table_entry & 0xfffff000;
+    s_printk("old_page = 0x%x\n", old_page);
     if (old_page >= LOW_MEM && mem_map[MAP_NR(old_page)] == 1) {    // 页面没有被共享
+        s_printk("Above 1MB\n");
         *table_entry |= 2;      // 置位 R/W
         invalidate();
         return;
@@ -363,17 +366,17 @@ void un_wp_page(unsigned long *table_entry) {
     // 它自己并不需要知道系统是如何保证的。
 }
 
-// 当用户试图往一共享页上写时，该函数处理已存在的内存页面（写时复制）
-// 它是通过将页面复制到一个新的地址上并递减原来页面共享计数值实现的
-// 如果它在代码空间，就显示段出错信息并退出
-// 执行写保护页面处理
-// 页异常中断处理过程中调用的c函数，在 page.s 中被调用
+//// 执行写保护页处理
+// 是写共享页面处理函数。是页异常中断处理过程中调用的C函数。在page.s程序中被调用。
 // error_code - cpu 自动产生
 // address - 页面线性地址
+// 写共享页面时，需复制页面（写时复制）
 void do_wp_page(unsigned long error_code, unsigned long address) {
+    s_printk("Page Fault(Write) at [0x%x], errono %d\n", address, error_code);
     error_code = error_code; // 纯粹为了消除警告
-    // 调用上面函数un_wp_page()来处理取消页面保护。但首先需要为其准备好参数。参
-    // 数是线性地址address指定页面在页表中的页表项指针，其计算方法是：
+    // 调用上面函数 un_wp_page() 来处理取消页面保护。但首先需要为其准备好参数。
+    // 参数是 线性地址address 指定页面在页表中的 页表项物理地址，
+    // 其计算方法是：
     // 1.((address>>10) & 0xffc): 计算指定线性地址中页表项在页表中的偏移地址；因
     // 为根据线性地址结构，(address>>12)就是页表项中的索引，但每项占4个字节，因
     // 此乘4后：(address>>12)<<2=(address>>10)&0xffc就可得到页表项在表中的偏移
@@ -393,27 +396,39 @@ void do_wp_page(unsigned long error_code, unsigned long address) {
     un_wp_page((unsigned long *)
 		(((address>>10) & 0xffc) + (0xfffff000 &
 		*((unsigned long *) ((address>>20) &0xffc)))));
+    mm_print_pageinfo(address);
 }
 
+// TODO: 未完成
 // 执行缺页处理
 // 访问不存在页面的处理函数，在页异常中断处理过程中调用，在 page.s 中调用
 // error_code - cup 自动产生
 // address - 页面线性地址
+// 该函数首先尝试与已加载的相同文件进行页面共享，或者只是由于进程动态申请内
+// 存页面而只需映射一页物理内存即可。若共享操作不成功，那么只能从相应文件中读入
+// 所缺的数据页面到指定线性地址处。
 void do_no_page(unsigned long error_code, unsigned long address) {
     // unsigned long tmp;
     unsigned long page;
 
-    s_printk("Page Fault at [%x], errono %d\n", address, error_code);
+    s_printk("Page Fault at [0x%x], errono %d\n", address, error_code);
     address &= 0xfffff000;
     if (!(page = get_free_page()))
         oom();
-    if (put_page(page, address))
+
+    // 最后把引起缺页异常的一页物理页面映射到指定线性地址address处。
+    // 若操作成功就返回。否则就释放内存页，显示内存不够。
+    if (put_page(page, address)) {
+        // mm_print_pageinfo(address);
         return;
+    }
     free_page(page);
     oom();
 }
 
 // 复制页目录表项和页表项
+// 注意！我们并不是复制任何内存块，内存块的地址需要是 4Mb 的倍数，
+// 正好一个页目录项对应的内存长度，不管怎么样，它仅被 fork() 使用。
 // 复制指定线性地址和长度内存对应的页目录项和页表项，从而被复制的页目录和页表对
 // 应的原物理内存页面区被两套页表映射而共享使用。复制时，需申请新页面来存放新页
 // 表，原物理内存区将被共享。此后两个进程（父进程和其子进程）将共享内存区，直到
@@ -482,6 +497,9 @@ int copy_page_tables(unsigned long from, unsigned long to, unsigned long size) {
     to_dir = 0 + (unsigned long *) ((to >> 20) & 0xffc);        // 64M 计算得 0x40 = 64
     size = ((unsigned)(size + 0x3fffff)) >> 22;                 // 把不足一个4MB(一个页表所能控制的内存长度）的size取整为一个4MB, 640kb 计算得 1
 
+    // s_printk("from_dir = 0x%x, *from_dir = 0x%x\n", from_dir, *from_dir);
+    // s_printk("to_dir = 0x%x, *to_dir = 0x%x\n", to_dir, *to_dir);
+
     // 在得到了源起始目录项指针 from_dir 和目的起始目录项指针 to_dir 以及需要复制的
     // 页表个数 size 后，下面开始对每个页目录项依次申请1页内存来保存对应的页表，
     // 并且开始页表项复制操作。如果目的目录指定的页表已经存在(P=1)，则出错死机。
@@ -502,10 +520,11 @@ int copy_page_tables(unsigned long from, unsigned long to, unsigned long size) {
         // 如果取空闲页面函数 get_free_page() 返回0，则说明没有申请到空闲内存页面，
         // 可能是内存不够, 于是返回-1值退出。
         from_page_table = (unsigned long *)(0xfffff000 & *from_dir);     // 把 *from_dir 的高20位取出来, 源目录项中页表的地址
+        // s_printk("from_page_table = 0x%x, *from_page_table = 0x%x\n", from_page_table, *from_page_table);
         if (!(to_page_table = (unsigned long *)get_free_page())) {      // 例: to_page_table = 0xffe000, 0xfff000 在 copy_process 中使用
             return -1;                                                  //     为进程 1 管理结构
         }
-
+        // s_printk("to_page_table = 0x%x, *to_page_table = 0x%x\n", to_page_table, *to_page_table);
         // 否则我们设置目的目录项信息，把最后3位置位，即当前目录的目录项 | 7，
         // 表示对应页表映射的内存页面是用户级的，并且可读写、存在(Usr,R/W,Present).
         // (如果U/S位是0，则R/W就没有作用。如果U/S位是1，而R/W是0，那么运行在用
@@ -514,6 +533,7 @@ int copy_page_tables(unsigned long from, unsigned long to, unsigned long size) {
         // 如果是在内核空间，则仅需复制头 160 页对应的页表项(nr=160),对应于开始 640KB 物理内存
         // 否则需要复制一个页表中的所有1024个页表项(nr=1024)，可映射4MB物理内存。
         *to_dir = ((unsigned long) to_page_table) | 7;          // 设置标志
+        // s_printk("to_dir = 0x%x, *to_dir = 0x%x\n", to_dir, *to_dir);
         nr = (from == 0) ? 0xA0 : 1024;                         // 若内核空间，则仅需复制头160页（640KB）
         // 此时对于当前页表，开始循环复制指定的 nr 个内存页面表项。先取出源页表的内容，
         // 如果当前源页表没有使用，则不用复制该表项，继续处理下一项。
@@ -523,7 +543,7 @@ int copy_page_tables(unsigned long from, unsigned long to, unsigned long size) {
             this_page = *from_page_table;
             if (!(1 & this_page))                               // 当前源页面没有使用，则不用复制
                 continue;
-            this_page &= (unsigned long)~2;                     // 置为可读, 进程A车机进程B后继续执行,A的压栈写操作引发页写保护 page_fault
+            this_page &= (unsigned long)~2;                     // 置为可读, 进程A创建进程B后继续执行,B的压栈写操作引发页写保护 page_fault
             *to_page_table = this_page;
 
             // 如果该页表所指物理页面的地址在1MB以上，则需要设置内存页面映射数

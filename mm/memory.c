@@ -198,7 +198,7 @@ int free_page_tables(unsigned long from, unsigned long size) {
             pg_tbl++;
         }
 
-        free_page(0xfffff000 & *dir);
+        free_page(0xfffff000 & *dir);                   // 释放该页表所占内存页面
         *dir = 0;
     }
 

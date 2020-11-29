@@ -11,7 +11,7 @@ LDFLAGS += -Ttext 0 -e startup_32 -nostdlib
 
 all: Image
 
-OBJS = boot/head.o init/main.o kernel/kernel.o mm/mm.o
+OBJS = boot/head.o init/main.o kernel/kernel.o mm/mm.o lib/lib.o
 
 system: $(OBJS)
 	@$(LD) $(LDFLAGS) $(OBJS) -o system.sym
@@ -35,6 +35,9 @@ init/main.o:
 
 mm/mm.o:
 	@make -C mm
+
+lib/lib.o:
+	@make -C lib
 
 Image: boot/bootsect boot/setup system
 	@echo "Start building image..."
@@ -61,6 +64,7 @@ clean:
 	make clean -C kernel
 	make clean -C mm
 	make clean -C init
+	make clean -C lib
 
 ###################################################################################
 # 							qemu 运行参数说明

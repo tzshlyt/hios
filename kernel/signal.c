@@ -4,6 +4,7 @@
 #include <asm/segment.h>
 #include <linux/sched.h>
 
+void do_exit(int error_code);
 
 void dump_sigaction(struct sigaction *action) {
     s_printk("Sigaction dump\n");
@@ -51,7 +52,7 @@ void do_signal(long signr,long eax, long ebx, long ecx, long edx,
         if (signr == SIGCHLD)   // 子进程停止或终止
             return;
         else
-            panic("Default signal handler");    // do_exit(1<<(signr-1));      // 不再返回到这里
+            do_exit(1<<(signr-1));      // 不再返回到这里
     }
     // OK,以下准备对信号句柄的调用设置。如果该信号句柄只需使用一次，则将该
     // 句柄置空。注意，该信号句柄已经保存在 sa_handler 指针中。

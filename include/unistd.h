@@ -1,15 +1,19 @@
 #ifndef _UNISTD_H
 #define _UNISTD_H
 
+#include <sys/types.h>
+
 #ifdef __LIBRARY__
 
-#define __NR_fork 2
-#define __NR_pause 29
-#define __NR_kill 37
-#define __NR_sigaction 67
-#define __NR_sgetmask 68
-#define __NR_ssetmask 69
-#define __NR_sys_debug 72
+#define __NR_exit       1
+#define __NR_fork       2
+#define __NR_waitpid	7
+#define __NR_pause      29
+#define __NR_kill       37
+#define __NR_sigaction  67
+#define __NR_sgetmask   68
+#define __NR_ssetmask   69
+#define __NR_sys_debug  72
 
 /* 例如
 static inline int fork(void) {
@@ -86,5 +90,9 @@ type name(atype a, btype b, ctype c) \
 }
 
 #endif
+
+void _exit(int status);
+pid_t waitpid(pid_t pid, int * wait_stat, int options);
+pid_t wait(int * wait_stat);
 
 #endif

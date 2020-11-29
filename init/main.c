@@ -116,9 +116,11 @@ void init() {
 }
 
 void sched_abcd_demo() {
-    // Here init process (pid = 1) will
+    // Here init process (pid = 2) will
     // print AABB randomly
-    if(!fork()) {
+    int pid, i;
+
+    if(fork()) {
         while(1);
             // sys_debug("A\n");
     }
@@ -126,9 +128,16 @@ void sched_abcd_demo() {
         while(1);
             // sys_debug("B\n");
     }
-    if(!fork()) {
+    if(!(pid = fork())) {
+        sys_debug("exit befor\n");
+        _exit(1);
+        sys_debug("exit after\n");
         while(1);
             // sys_debug("C\n");
+    }
+    if (pid > 0) {
+        sys_debug("wait pid\n");
+        while (pid != wait(&i));
     }
     if(!fork()) {
         while(1);

@@ -3,7 +3,33 @@
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <serial_debug.h>
+#include <sys/wait.h>
+#include <asm/segment.h>
+/*
+    该程序主要描述了进程(任务)终止和退出的有关处理事宜。
+    主要包含进程释放、会话(进程组)终止和程序退出处理函数以及杀死进程、终止进程、挂起进程等系统调用函数。
+    还包括进程信号发送函数 send_ sig() 和 通知父进程子进程终止的函数 tell_father()。
+*/
 
+//// 释放指定进程占用的任务槽及其任务数据结构占用的内存页面。
+// 参数 p 是任务数据结构指针。该函数在后面的 sys_kill() 和 sys_waitpid() 函数中被调用。
+// 扫描任务指针数组表task[]以寻找指定的任务。如果找到，则首先清空该任务槽，
+// 然后释放该任务数据结构所占用的内存页面，最后执行调度函数并在返回时立即退出。
+// 如果在任务数组表中没有找到指定任务对应的项，则内核panic. ;-)
+void release(struct task_struct *p) {
+    int i;
+    if (!p) {
+        return;
+    }
+    for (i = 1; i < NR_TASKS; i++) {                    // 扫描任务数组，寻找指定任务
+        if (task[i] == p) {
+            task[i] = NULL;
+            free_page((unsigned long)p);                         // 置空该任务项并释放相关内存页。
+            schedule();                                 // 重新调度(似乎没有必要)
+        }
+    }
+    panic("trying to release non-existent task");       // 指定任务若不存在则死机
+}
 
 //// 向指定任务 p 发送信号 sig, 权限 priv。
 // 参数：
@@ -55,4 +81,177 @@ int sys_kill(int pid, int sig) {
     }
     s_printk("sys_kill leaved, retval = %d\n", retval);
     return retval;
+}
+
+//// 通知父进程 - 向进程 pid 发送信号 SIGCHLD；默认情况下子进程将停止或终止。
+// 如果没有找到父进程，则自己释放。但根据POSIX.1要求，若父进程已先行终止，
+// 则子进程应该被初始进程1收容。
+static void tell_father(int pid) {
+    int i;
+    if (pid) {
+        for (i = 0; i < NR_TASKS; i++) {        // 扫描进城数组表，寻找指定进程pid，并向其发送子进程将停止或终止信号SIGCHLD。
+            if (!task[i]) {
+                continue;
+            }
+            if (task[i]->pid != pid) {
+                continue;
+            }
+            task[i]->signal |= (1 << (SIGCHLD - 1));
+            return;
+        }
+    }
+    printk("BAD BAD - no father found\n\r");
+    release(current);                           // 如果没有找到父进程，则自己释放
+}
+
+//// 程序退出处理函数。
+// 该函数将把当前进程置为TASK_ZOMBIE状态，然后去执行调度函数schedule()，不再返回。
+// 参数 code 是退出状态码，或称为错误码。
+int do_exit(long code) {
+    s_printk("do_exit(%d), pid = %d\n", code, current->pid);
+    int i;
+    // 首先释放当前进程代码段和数据段所占的内存页。
+    free_page_tables(get_base(current->ldt[1]),get_limit(0x0f));
+	free_page_tables(get_base(current->ldt[2]),get_limit(0x17));
+    // 如果当前进程有子进程，就将子进程的 father 置为 1 (其父进程改为进程1，即init进程)。
+    // 如果该子进程已经处于僵死(ZOMBIE)状态，则向进程1发送子进程中止信号 SIGCHLD。
+    for (i = 0; i < NR_TASKS; i++) {
+        if (task[i] && task[i]->father == current->pid) {
+            task[i]->father = 1;
+            if (task[i]->state == TASK_ZOMBIE) {
+                /* assumption task[1] is always init */
+                send_sig(SIGCHLD, task[1], 1);
+            }
+        }
+    }
+    // TODO: 关闭当前进程打开着的所有文件。
+
+    // TODO: 对当前进程的工作目录pwd，根目录root以及执行程序文件的i节点进行同步操作，
+    // 放回各个i节点并分别置空(释放)。
+
+    // TODO: 如果当前进程上次使用过协处理器，则将last_task_used_math置空。
+
+    // TODO: 如果当前进程是leader进程，则终止该会话的所有相关进程。
+
+    // 把当前进程置为僵死状态，表明当前进程已经释放了资源。并保存将由父进程读取的退出码
+    current->state = TASK_ZOMBIE;
+    current->exit_code = code;
+    // 通知父进程，也即向父进程发送信号SIGCHLD - 子进程将停止或终止。
+    tell_father(current->father);
+    schedule();                     // 重新调度进程运行，以让父进程处理僵死其他的善后事宜。
+    // 下面的return语句仅用于去掉警告信息。因为这个函数不返回，所以若在函数名前加关键字
+    // volatile，就可以告诉gcc编译器本函数不会返回的特殊情况。这样可让gcc产生更好一些的代码，
+    // 并且可以不用再写return语句也不会产生假警告信息。
+    return -1;
+}
+
+//// 系统调用exit()，终止进程。
+// 参数error_code是用户程序提供的退出状态信息，只有低字节有效。
+// 把error_code左移8bit是 wait() 或 waitpid() 函数的要求。
+// 低字节中将用来保存 wait() 的状态信息。例如，如果进程处理暂停状态(TASK_STOPPED),
+// 那么其低字节就等于0x7f. wait() 或 waitpid() 利用这些宏就可以取得子进程的退出状态码或子进程终止的原因。
+int sys_exit(int error_code) {
+	return do_exit((error_code & 0xff)<<8);
+}
+
+//// 系统调用 waipid(). 挂起当前进程，直到 pid 指定的子进程退出(终止)或收到要求终止该进程的信号，
+// 或者是需要调用一个信号句柄(信号处理程序)。如果 pid 所指向的子进程早已退出(已成所谓的僵死进程)，
+// 则本调用将立刻返回。子进程使用的所有资源将释放。
+// 如果pid > 0，表示等待进程号等于 pid 的子进程。
+// 如果pid = 0, 表示等待进程组号等于当前进程组号的任何子进程。
+// 如果pid < -1, 表示等待进程组号等于 pid 绝对值的任何子进程。
+// 如果pid = -1, 表示等待任何子进程。
+// 如 options = WUNTRACED, 表示如果子进程是停止的，也马上返回(无须跟踪)
+// 若 options = WNOHANG, 表示如果没有子进程退出或终止就马上返回。
+// 如果返回状态指针 stat_addr 不为空，则就将状态信息保存到那里。
+// pid 是进程号，
+// *stat_addr 是保存状态信息位置的指针，
+// options 是 waitpid 选项。
+int sys_waitpid(pid_t pid, unsigned long *stat_addr, int options) {
+    s_printk("sys_waitpid pid = %d\n", pid);
+    int flag, code;         // flag标志用于后面表示所选出的子进程处于就绪或睡眠态。
+    struct task_struct **p;
+
+    verify_area(stat_addr, 4);
+repeat:
+    flag = 0;
+    // 从任务数组末端开始扫描所有任务，跳过空项、本进程项以及非当前进程的子进程项。
+    for (p = &LAST_TASK; p > &FIRST_TASK; --p) {
+        if (!(*p) || (*p) == current) {
+            continue;
+        }
+        if ((*p)->father != current->pid) {
+            continue;
+        }
+        // 此时扫描选择到的进程p肯定是当前进程的子进程。
+        // 如果等待的子进程号pid>0，但与被扫描子进程p的pid不相等，说明它是当前进程另外的
+        // 子进程，于是跳过该进程，接着扫描下一个进程。
+        if (pid > 0) {
+            if ((*p)->pid != pid) {
+                continue;
+            }
+        // 否则，如果指定等待进程的 pid=0 , 表示正在等待进程组号等于当前进程组号的任何子进程。
+        // 如果此时被扫描进程 p 的进程组号与当前进程的组号不等，则跳过。
+        } else if(!pid) {
+            if ((*p)->pgrp != current->pgrp) {
+                continue;
+            }
+        // 否则，如果指定的pid < -1,表示正在等待进程组号等于 pid 绝对值的任何子进程。如果此时
+        // 被扫描进程 p 的组号与 pid的绝对值不等，则跳过。
+        } else if (pid != -1) {
+            if ((*p)->pgrp != -pid) {
+                continue;
+            }
+        }
+
+        // 如果前3个对 pid 的判断都不符合，则表示当前进程正在等待其任何子进程，也即 pid=-1 的情况，
+        // 此时所选择到的进程 p 或者是其进程号等于指定pid，或者是当前进程组中的任何子进程，或者
+        // 是进程号等于指定 pid 绝对值的子进程，或者是任何子进程(此时指定的pid等于-1).
+        // 接下来根据这个子进程 p 所处的状态来处理。
+        switch ((*p)->state) {
+            // 子进程 p 处于停止状态时，如果此时 WUNTRACED 标志没有置位，表示程序无须立刻返回，
+            // 于是继续扫描处理其他进程。如果 WUNTRACED 置位，则把状态信息 0x7f 放入*stat_addr，并立刻
+            // 返回子进程号pid.这里0x7f表示的返回状态是wifstopped（）宏为真。
+            case TASK_STOPPED:
+                if (!(options & WUNTRACED)) {
+                    continue;
+                }
+                put_fs_long(0x7f, stat_addr);
+                return (*p)->pid;
+            break;
+            // 如果子进程 p 处于僵死状态，则首先把它在用户态和内核态运行的时间分别累计到当前进程(父进程)中,
+            // 然后取出子进程的 pid 和 退出码，并释放该子进程。最后返回子进程的退出码和pid.
+            case TASK_ZOMBIE:
+                current->cutime += (*p)->utime;
+                current->cstime += (*p)->stime;
+                flag = (*p)->pid;                   // 临时保存子进程pid
+                code = (*p)->exit_code;             // 取子进程的退出码
+                release(*p);
+                put_fs_long((unsigned long)code, stat_addr);
+                return flag;
+            break;
+            default:
+                flag = 1;
+                break;
+        }
+    }
+    // 在上面对任务数组扫描结束后，如果flag被置位，说明有符合等待要求的子进程并没有处于退出或僵死状态。
+    // 如果此时已设置 WNOHANG 选项(表示若没有子进程处于退出或终止态就立刻返回)，
+    // 就立刻返回0，退出。否则把当前进程置为可中断等待状态并重新执行调度。当又开始执行本进程时，
+    // 如果本进程没有收到除 SIGCHLD 以外的信号，则还是重复处理。
+    // 否则，返回出错码‘中断系统调用’并退出。针对这个出错号用户程序应该再继续调用本函数等待子进程。
+    if (flag) {
+        if (options & WNOHANG) {                    // options = WNOHANG,则立刻返回。
+            return 0;
+        }
+        current->state = TASK_INTERRUPTIBLE;        // 置当前进程为可中断等待态
+        schedule();                                 // 重新调度
+        if (!(current->signal &= ~(1 << (SIGCHLD - 1)))) {
+            goto repeat;
+        } else {
+            return -EINTR;                          // 返回出错码(中断的系统调用)
+        }
+    }
+    // 若没有找到符合要求的子进程，则返回出错码(子进程不存在)。
+    return -ECHILD;
 }

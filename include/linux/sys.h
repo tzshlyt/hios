@@ -3,7 +3,9 @@
 
 #include<linux/sched.h>
 
+extern int sys_exit();
 extern int sys_fork();
+extern int sys_waitpid();
 extern int sys_pause();
 extern int stub_syscall();
 extern int serial_debugstr(char *str);
@@ -15,13 +17,13 @@ extern int sys_ssetmask(int newMask);
 //TODO 目前除了少数syscall之外其余的syscall均为stub状态
 fn_ptr sys_call_table[] = {
     stub_syscall, // 0
-    stub_syscall,
+    sys_exit,
     sys_fork,     // 2
     stub_syscall,
     stub_syscall,
     stub_syscall,
     stub_syscall,
-    stub_syscall,
+    sys_waitpid,
     stub_syscall,
     stub_syscall,
     stub_syscall, // 10

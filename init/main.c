@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <asm/system.h>
 #include <asm/io.h>
+#include <linux/tty.h>
 // Use to debug serial
 #include <serial_debug.h>
 
@@ -59,6 +60,7 @@ int main() {
     video_init();
     trap_init();
     sched_init();
+    tty_init();
     // printk("Welcome to Linux0.1 Kernel Mode(NO)\n");
 
     // 初始化物理页内存, 将 1MB - 16MB 地址空间的内存进行初始

@@ -19,3 +19,4 @@ kernel.o: $(OBJS)
 
 clean:
 	rm -f *.o
+	make -C chr_drv clean

@@ -2,11 +2,11 @@
 *.o
 *.bin
 *.sym
+*.a
 
 Image
 system
 boot/setup
 
 .vscode
-
 

@@ -98,6 +98,9 @@ void printk(char *fmt, ...) {
                 while(*s)
                     video_putchar(*s++);
                 break;
+            case 'c':
+                video_putchar(va_arg(ap, char));
+                break;
             case '%':
                 video_putchar('%');
         }

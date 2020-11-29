@@ -118,7 +118,7 @@ struct task_struct {
 
     unsigned short used_math;           // 标志：是否使用了协处理器
 
-    // int tty;                            // 进程使用tty的子设备号。-1 表示没有使用
+    int tty;                            // 进程使用 tty 的子设备号。-1 表示没有使用
     // 下面是和文件系统相关的变量，暂时不使用，先注释
     //unsigned short umask;               // 文件创建属性屏蔽位
     //struct m_inode * pwd;               // 当前工作目录i节点结构
@@ -141,6 +141,7 @@ struct task_struct {
 /* uid */    0, 0, 0, 0, 0, 0, \
 /* alarm, etc... */   0, 0, 0, 0, 0, 0, \
 /* math */    0, \
+/* tty */   -1, \
 /* LDT */    { \
         {0, 0},\
         {0x9f, 0xc0fa00},  /* 代码长640k, 基地址 0x0, G=1, D=1, DPL=3, P=1 TYPE=0x0a */ \

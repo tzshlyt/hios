@@ -22,7 +22,7 @@ const char shift_scancode_table[] = "..!@#$%^&*()_+\b.QWERTYUIOP{}\n.ASDFGHJKL:\
 
 char toupper(char ch) {
     if (ch >= 'a' && ch <= 'z') {
-        ch = ch - 'a' + 'A';
+        ch = (char)(ch - 'a' + 'A');
     }
     return ch;
 }
@@ -93,7 +93,7 @@ void do_keyboard_interrupt(short scancode) {
         if (tty_push_q(&tty_table[0].read_q, ch)) {
             s_printk("read queue full\n");
         }
-        tty_queue_stat(&tty_table[0].read_q);
+        copy_to_buffer(&tty_table[0]);
     }
     return ;
 }

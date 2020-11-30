@@ -49,5 +49,48 @@ struct tty_struct tty_table[] = {
 };
 
 void tty_init() {
+    tty_table[0].write = con_write;
     con_init();                 // 初始化控制台终端(console.c文件中)
+}
+
+void copy_to_buffer(struct tty_struct *tty) {
+    char ch;
+    struct tty_queue *read_q= &tty->read_q;
+    struct tty_queue *buffer= &tty->buffer;
+
+    while(!tty_isempty_q(&tty->read_q)) {
+        ch = tty_pop_q(read_q);
+        switch(ch) {
+            case '\b':
+                // This is backspace char
+                if (!tty_isempty_q(buffer)) {
+                    if(tty_queue_tail(buffer) == '\n')  // \n 不能被清除掉
+                       continue ;
+                    buffer->tail = (buffer->tail - 1) % TTY_BUF_SIZE;
+                } else {
+                    continue;
+                }
+                break;
+            case '\n':
+            default:
+                if (!tty_isfull_q(buffer)) {
+                    tty_push_q(buffer, ch);
+                } else {
+                    // here we need to sleep until the queue
+                    // is not full
+                }
+                break;
+        }
+
+        if (tty->flags | TTY_ECHO) {
+            tty_push_q(&tty->write_q, ch);
+            tty->write(tty);
+        }
+    }
+    return ;
+}
+
+void tty_write(struct tty_struct *tty) {
+    tty->write(tty);
+    return;
 }

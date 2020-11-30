@@ -20,8 +20,7 @@ void printk(char *fmt, ...) {
     va_end(ap);
 
     while (*ptr) {
-        tty_push_q(&tty_table[0].write_q, *ptr);
-        tty_queue_stat(&tty_table[0].write_q);
+        PUTCH(*ptr, tty_table[0].write_q);
         ptr++;
     }
     tty_write(&tty_table[0]);

@@ -108,13 +108,10 @@ void video_putchar(char ch) {
 
 void con_write(struct tty_struct *tty) {
     char ch;
-    s_printk("Console write called\n");
-    while (!tty_isempty_q(&tty->write_q)) {
-        tty_queue_stat(&tty->write_q);
-        ch = tty_pop_q(&tty->write_q);
+    while (!EMPTY(tty->write_q)) {
+        GETCH(tty->write_q, ch);
         video_putchar(ch);
     }
-    s_printk("Console write called\n");
 }
 
 void video_clear() {

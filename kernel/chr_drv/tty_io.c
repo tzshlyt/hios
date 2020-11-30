@@ -4,6 +4,7 @@
 #include <asm/system.h>
 #include <asm/io.h>
 #include <linux/tty.h>
+#include <asm/segment.h>
 #include <serial_debug.h>
 
 /*
@@ -18,6 +19,8 @@
       tail, 读，右移                head, 写，右移
 
 */
+
+#define DEBUG
 
 void con_init();
 extern void con_write(struct tty_struct *tty);
@@ -53,28 +56,39 @@ void tty_init() {
     con_init();                 // 初始化控制台终端(console.c文件中)
 }
 
+// copy_to_buffer() 函数由键盘中断过程调用(通过do_keyboard_interrupt()),
+// 用于根据终端termios 结构中设置的字符输入/输出标志(例如INLCR、OUCLC)对 read_q 队列中的字符进行处理，
+// 把字符转换成以字符行为单位的规范模式字符序列，并保存在辅助字符缓冲队列( 规范模式缓冲队列) (secondary) 中，供上述tty_read()读取。
+// 在转换处理期间，若终端的回显标志 L_ECHO 置位，则还会把字符放入写队列 write_q 中，并调用终端写函数把该字符显示在屏幕上。
+// 如果是串行终端，那么写函数将是 rs_write() (在serial.c)。
+// rs_ write() 会把串行终端写队列中的字符通过串行线路发送给串行终端，并显示在串行终端的屏幕上。
+// copy_to_buffer() 函数最后还将唤醒等待着辅助缓冲队列的进程。
 void copy_to_buffer(struct tty_struct *tty) {
     char ch;
-    struct tty_queue *read_q= &tty->read_q;
-    struct tty_queue *buffer= &tty->buffer;
 
-    while(!tty_isempty_q(&tty->read_q)) {
-        ch = tty_pop_q(read_q);
+    while(!EMPTY(tty->read_q)) {
+        GETCH(tty->read_q, ch);
         switch(ch) {
             case '\b':
                 // This is backspace char
-                if (!tty_isempty_q(buffer)) {
-                    if(tty_queue_tail(buffer) == '\n')  // \n 不能被清除掉
+                if (!EMPTY(tty->buffer)) {
+                    if(tty->buffer.buf[tty->buffer.head - 1] == '\n')  // \n 不能被清除掉
                        continue ;
-                    buffer->tail = (buffer->tail - 1) % TTY_BUF_SIZE;
+                    DEC(tty->buffer.head);
                 } else {
                     continue;
                 }
                 break;
+            case -1:
             case '\n':
+                s_printk("Enter wake the tty read queue up\n");
+                PUTCH(ch, tty->buffer);
+                wake_up(&tty_table[0].buffer.wait_proc);
+                break;
+                // EOF
             default:
-                if (!tty_isfull_q(buffer)) {
-                    tty_push_q(buffer, ch);
+                if (!FULL(tty->buffer)) {
+                    PUTCH(ch, tty->buffer);
                 } else {
                     // here we need to sleep until the queue
                     // is not full
@@ -83,7 +97,7 @@ void copy_to_buffer(struct tty_struct *tty) {
         }
 
         if (tty->flags | TTY_ECHO) {
-            tty_push_q(&tty->write_q, ch);
+            PUTCH(ch, tty->write_q);
             tty->write(tty);
         }
     }
@@ -93,4 +107,67 @@ void copy_to_buffer(struct tty_struct *tty) {
 void tty_write(struct tty_struct *tty) {
     tty->write(tty);
     return;
+}
+
+static void sleep_if_empty(struct tty_queue *queue) {
+	cli();
+	while (!current->signal && EMPTY(*queue))
+		interruptible_sleep_on(&queue->wait_proc);
+	sti();
+}
+
+static void sleep_if_full(struct tty_queue *queue) {
+	if (!FULL(*queue))
+		return;
+	cli();
+	while (!current->signal && LEFT(*queue)<128)
+		interruptible_sleep_on(&queue->wait_proc);
+	sti();
+}
+
+void wait_for_keypress(void) {
+	sleep_if_empty(&tty_table[0].buffer);
+}
+
+// tty 读函数
+// 从终端辅助缓冲队列中读取指定数量的字符，放到用户指定的缓冲区中。
+// channel: 子设备号
+// buf: 用户缓冲区指针
+// nr: 欲读字节数
+// 返回已读字节数
+int tty_read(unsigned channel, char *buf, int nr) {
+#ifdef DEBUG
+    s_printk("tty_read channel = %d, buf = %x, nr = %d, pid = %d\n", channel, buf, nr, current->pid);
+#endif
+    struct tty_struct *tty;
+    int len = 0;
+    char ch;
+    char *p = buf;
+    if (channel > 2 || nr < 0) {
+        return -1;
+    }
+    tty = &tty_table[channel];
+    // interruptible_sleep_on(&tty->buffer.wait_proc);
+    while (nr > 0){
+        while (1) {
+            if (EMPTY(tty->buffer)) {
+                sleep_if_empty(&tty->buffer);
+#ifdef DEBUG
+                s_printk("tty->buffer empty\n");
+#endif
+            }
+
+            GETCH(tty->buffer, ch);
+            // put_fs_byte(ch, p++);  // TODO: 为什么不可以
+            *p++ = ch;
+            len++;
+            nr--;
+            // TODO: Change -1 to EOF
+            if (ch == '\n' || ch == -1) {
+                break;
+            }
+        }
+        s_printk("Buf = %s\n", buf);
+    }
+    return len;
 }

@@ -5,6 +5,7 @@
 #define TTY_ECHO 0x0001                 // 回显标
 
 void tty_init();                        // tty 初始化
+int tty_read(unsigned channel, char * buf, int nr);
 
 // tty 字符缓冲队列数据结构
 struct tty_queue {
@@ -13,6 +14,23 @@ struct tty_queue {
     unsigned long head;
     unsigned long tail;
 };
+
+// tty 等待队列中缓冲区操作宏函数
+// [-------------------------------]
+//      ^                       ^
+//    tail, 取,右移          head, 存, 右移
+//
+#define INC(a) ((a) = ((a)+1) & (TTY_BUF_SIZE-1))
+#define DEC(a) ((a) = ((a)-1) & (TTY_BUF_SIZE-1))
+#define EMPTY(a) ((a).head == (a).tail)
+#define LEFT(a) (((a).tail-(a).head-1)&(TTY_BUF_SIZE-1))        // 缓冲区还可以存放字符长度(空闲区长度)
+#define LAST(a) ((a).buf[(TTY_BUF_SIZE-1)&((a).head-1)])        // 缓冲区中最后一个位置
+#define FULL(a) (!LEFT(a))                                      // 缓冲区已满
+#define CHARS(a) (((a).head-(a).tail)&(TTY_BUF_SIZE-1))         // 缓冲区已存放字符长度
+#define GETCH(queue,c) \
+(void)({c=(queue).buf[(queue).tail];INC((queue).tail);})
+#define PUTCH(c,queue) \
+(void)({(queue).buf[(queue).head]=(c);INC((queue).head);})
 
 // tty 数据结构
 struct tty_struct {
@@ -25,12 +43,6 @@ struct tty_struct {
 };
 
 extern struct tty_struct tty_table[];           // tty 结构数组
-int tty_isempty_q(const struct tty_queue *q);
-int tty_isfull_q(const struct tty_queue *q);
-char tty_pop_q(struct tty_queue *q);
-char tty_queue_head(const struct tty_queue *q);
-char tty_queue_tail(const struct tty_queue *q);
-int tty_push_q(struct tty_queue *q, char ch);
 void tty_queue_stat(const struct tty_queue *q);
 void tty_write(struct tty_struct *tty);
 void copy_to_buffer(struct tty_struct *tty);

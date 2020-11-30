@@ -39,7 +39,7 @@ void do_keyboard_interrupt(short scancode) {
     char ch = ' ';
 
     if (RELEASE_CHAR(scancode)) {
-        s_printk("Keyboard Release 0x%x\n", scancode);
+        // s_printk("Keyboard Release 0x%x\n", scancode);
 
         // Check if Shift / Alt / Ctrl / Released
         if (scancode == (LCTRL | 0x80)) {
@@ -89,10 +89,10 @@ void do_keyboard_interrupt(short scancode) {
                 ch = toupper(ch);
             }
         }
+        // s_printk("Keyboard Press 0x%x[ %d ]\n", scancode, ch)
         // TODO: 使得 tty 和进程对应, 当前都是指向 tty_table[0]
-        if (tty_push_q(&tty_table[0].read_q, ch)) {
-            s_printk("read queue full\n");
-        }
+        PUTCH(ch, tty_table[0].read_q);
+
         copy_to_buffer(&tty_table[0]);
     }
     return ;

@@ -14,6 +14,7 @@ extern void trap_init(void);
 extern void video_init(void);
 extern void sched_init(void);
 extern void mem_init(unsigned long start_mem, unsigned long end_mem);
+extern int user_tty_read(unsigned channel, char *buf, int nr);
 void init(void);
 
 static inline int fork(void) __attribute__((always_inline));
@@ -120,30 +121,35 @@ void init() {
 void sched_abcd_demo() {
     // Here init process (pid = 2) will
     // print AABB randomly
-    int pid, i;
+    char buf[100] = "";
+    sys_debug("before read\n");
+    user_tty_read(0, buf, 20);
 
-    if(fork()) {
-        while(1);
-            // sys_debug("A\n");
+    sys_debug("after read\n");
+    sys_debug(buf);
+
+    while(1);
+
+    int pid;
+    if(!fork()) {
+      while(1) {
+            sys_debug("A");
+        }
     }
     if(!fork()) {
-        while(1);
-            // sys_debug("B\n");
+        while(1) {
+            sys_debug("B");
+        }
     }
     if(!(pid = fork())) {
-        sys_debug("exit befor\n");
-        _exit(1);
-        sys_debug("exit after\n");
-        while(1);
-            // sys_debug("C\n");
-    }
-    if (pid > 0) {
-        sys_debug("wait pid\n");
-        while (pid != wait(&i));
+        while(1) {
+            sys_debug("C");
+        }
     }
     if(!fork()) {
-        while(1);
-            // sys_debug("D\n");
+        while(1) {
+            sys_debug("D");
+        }
     }
     while(1);
 }

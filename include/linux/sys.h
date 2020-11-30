@@ -14,9 +14,12 @@ extern int sys_sigaction(int signum, struct sigaction *action, struct sigaction 
 extern int sys_sgetmask(void);
 extern int sys_ssetmask(int newMask);
 
+// Just for debug use
+extern int tty_read(unsigned channel, char *buf, int nr);
+
 //TODO 目前除了少数syscall之外其余的syscall均为stub状态
 fn_ptr sys_call_table[] = {
-    stub_syscall, // 0
+    tty_read, // 0
     sys_exit,
     sys_fork,     // 2
     stub_syscall,

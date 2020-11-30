@@ -145,28 +145,41 @@ void show_task_info(struct task_struct *task) {
 // 由于新等待任务是插在头部的，所以唤醒的是最后进入的等待队列的任务
 void wake_up(struct task_struct **p) {
     if (p && *p) {
-        (**p).state = 0;
+        (**p).state = TASK_RUNNING;                // 置为就绪(可运行)状态TASK_RUNNING.
         *p = NULL;
     }
 }
 
+// 将当前任务置为可中断的等待状态，并放入*p指定的等待队列中。
 void interruptible_sleep_on(struct task_struct **p) {
     struct task_struct *tmp;
+    // 若指针无效，则退出。(指针所指向的对象可以是NULL，但指针本身不会为0)。
+    // 如果当前任务是任务0，则死机。
     if (!p)
         return;
     if (current == &(init_task.task))
         panic("task[0] trying to sleep");
+    // 让 tmp 指向已经在等待队列上的任务(如果有的话)，例如 inode->i_wait。
+    // 并且将睡眠队列头的等待指针指向当前任务。这样就把当前任务插入到了 *p 的等待队列中。
+    // 然后将当前任务置为可中断的等待状态，并执行重新调度。
     tmp = *p;
     *p = current;
 repeat: current->state = TASK_INTERRUPTIBLE;
     schedule();
+    // 只有当这个等待任务被唤醒时，程序才又会回到这里，标志进程已被明确的唤醒执行。
+    // 如果等待队列中还有等待任务，并且队列头指针所指向的任务不是当前任务时，
+    // 则将该等待任务置为可运行的就绪状态，并重新执行调度程序。
+    // 当指针 *p 所指向的不是当前任务时，表示在当前任务被被放入队列后，又有新的任务被插入等待队列前部。因此我们先唤醒他们，而让自己仍然等等。
+    // 等待这些后续进入队列的任务被唤醒执行时来唤醒本任务。于是去执行重新调度。
     if (*p && *p != current) {
-        (**p).state = 0;
+        (**p).state = TASK_RUNNING;
         goto repeat;
     }
+    // 下一句代码有误：应该是 *p = tmp, 让队列头指针指向其余等待任务，否则在当前任务之前插入
+    // 等待队列的任务均被抹掉了。当然同时也需要删除下面行数中同样的语句
     *p = tmp;
     if (tmp) {
-        tmp->state = 0;
+        tmp->state = TASK_RUNNING;
     }
 }
 

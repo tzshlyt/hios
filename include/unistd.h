@@ -8,6 +8,8 @@
 #define __NR_exit       1
 #define __NR_fork       2
 #define __NR_waitpid	7
+#define __NR_sleep      10
+#define __NR_alarm      27
 #define __NR_pause      29
 #define __NR_kill       37
 #define __NR_sigaction  67
@@ -97,5 +99,6 @@ type name(atype a, btype b, ctype c) \
 void _exit(int status);
 pid_t waitpid(pid_t pid, int * wait_stat, int options);
 pid_t wait(int * wait_stat);
+int alarm(long seconds);
 
 #endif

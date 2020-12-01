@@ -9,6 +9,8 @@
 #include <asm/io.h>
 #include <serial_debug.h>
 
+// #define DEBUG
+
 extern int timer_interrupt(void);
 extern int system_call(void);
 
@@ -84,13 +86,18 @@ void schedule(void) {
             // 该信号的默认操作是终止进程。jiffies是系统从开机开始算起的滴答数(10ms/滴答)。
             if ((*p)->alarm && (*p)->alarm < jiffies) {
                 (*p)->signal |= (1 << (SIGALRM-1));
+#ifdef DEBUG
+                s_printk("process get SIGALRM pid: %d signal: 0x%x mask: 0x%x blockable= 0x%x\n", \
+                       (*p)->pid, (*p)->signal, (*p)->blocked, _BLOCKABLE);
+#endif
                 (*p)->alarm = 0;
             }
             // 如果信号位图中除被阻塞的信号外还有其他信号，并且任务处于可中断状态，
             // 则置任务为就绪状态。其中'~(_BLOCKABLE & (*p)->blocked)'用于忽略被阻塞的信号，
             // 但 SIGKILL 和 SIGSTOP 不能被阻塞。
-            if((unsigned long)((*p)->signal) & (unsigned long)(~((unsigned long)(_BLOCKABLE) & ((*p)->blocked))
-                        && (unsigned long)((*p)->state) == TASK_INTERRUPTIBLE)) {
+            if(((unsigned long)((*p)->signal) & (unsigned long)(((unsigned long)(_BLOCKABLE) & (~(*p)->blocked))))  \
+                        && (unsigned long)((*p)->state) \
+                        == TASK_INTERRUPTIBLE) {
                 (*p)->state = TASK_RUNNING;
             }
         }
@@ -125,6 +132,7 @@ void schedule(void) {
     }
     // s_printk("Scheduler select task %d\n", next);
     // 若没有任务可运行时，next为0，会去执行任务0。此时任务0仅执行pause()系统调用，并又会调用本函数
+    // s_printk("[%d] Scheduler select task %d\n", jiffies, next);
     switch_to(next);
 }
 
@@ -196,6 +204,21 @@ int sys_pause(void) {
     current->state = TASK_INTERRUPTIBLE;
     schedule();
     return 0;
+}
+
+// 系统调用功能 - 设置报警定时时间值(秒)
+// 如果参数seconds大于0，则设置新定时值，并返回原定时时刻还剩余的间隔时间。否则
+// 返回0.进程数据结构中报警定时值 alarm 的单位是系统滴答(1滴答为10ms),
+// 它是系统开机起到设置定时操作时系统滴答值jiffies和转换成滴答单位的定时值之和，即'jiffies + HZ*定时秒值'。
+// 而参数给出的是以秒为单位的定时值，因此本函数的主要操作是进行两种单位的转换。
+// 其中常数 HZ = 100，是内核系统运行频率。seconds是新的定时时间值，单位：秒。
+int sys_alarm(long seconds) {
+    int old = current->alarm;
+    if (old) {
+        old = (old - jiffies) / HZ;
+    }
+    current->alarm = (seconds > 0) ? (jiffies + HZ * seconds) : 0;
+    return old;
 }
 
 // 时钟中断处理函数

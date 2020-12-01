@@ -4,6 +4,8 @@
 #include <asm/segment.h>
 #include <linux/sched.h>
 
+// #define DEBUG
+
 void do_exit(int error_code);
 
 void dump_sigaction(struct sigaction *action) {
@@ -27,13 +29,14 @@ void do_signal(long signr,long eax, long ebx, long ecx, long edx,
 	unsigned long eip, long cs, long eflags,
 	unsigned long * esp, long ss)
 {
-    s_printk("Signal = %d\n", signr);
+#ifdef DEBUG
     s_printk("Context signr = %d, eax = 0x%x, ebx = 0x%x, ecx = 0x%x\n \
             edx = 0x%x, fs = 0x%x, es = 0x%x, ds = 0x%x\n \
             eip = 0x%x, cs = 0x%x, eflags = 0x%x, esp = 0x%x, ss= 0x%x\n",
             signr, eax, ebx, ecx, edx, fs, es, ds, eip, cs, eflags ,esp, ss);
     s_printk("current pid = %d\n", current->pid);
     dump_sigaction(&current->sigaction[signr - 1]);
+ #endif
     unsigned long sa_handler;
     unsigned long old_eip = eip;
     struct sigaction * sa = current->sigaction + signr - 1;
@@ -52,7 +55,9 @@ void do_signal(long signr,long eax, long ebx, long ecx, long edx,
         if (signr == SIGCHLD)   // 子进程停止或终止
             return;
         else
-            do_exit(1<<(signr-1));      // 不再返回到这里
+            // do_exit(1<<(signr-1));      // 不再返回到这里 TODO:
+            return;
+
     }
     // OK,以下准备对信号句柄的调用设置。如果该信号句柄只需使用一次，则将该
     // 句柄置空。注意，该信号句柄已经保存在 sa_handler 指针中。
@@ -169,7 +174,9 @@ static inline void save_old(char *from, char *to) {
 // 如果oldaction指针不为空，则原来被保留到oldaction。
 // 成功则返回0，否则为-1.
 int sys_sigaction(int signum, const struct sigaction * action, struct sigaction *old_action) {
+#ifdef DEBUG
     s_printk("sys_sigaction entered signum = %d\n", signum);
+#endif
     struct sigaction tmp;
 
     if (signum < 1 || signum > 32 || signum == SIGKILL)
@@ -185,7 +192,11 @@ int sys_sigaction(int signum, const struct sigaction * action, struct sigaction 
 		current->sigaction[signum-1].sa_mask = 0;
 	else
 		current->sigaction[signum-1].sa_mask |= (sigset_t)(1<<(signum-1));
+
+#ifdef DEBUG
     s_printk("current pid = %d\n", current->pid);
     dump_sigaction(&current->sigaction[signum-1]);
+#endif
+
     return 0;
 }

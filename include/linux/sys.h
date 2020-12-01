@@ -13,6 +13,8 @@ extern int sys_kill(int pid, int sig);
 extern int sys_sigaction(int signum, struct sigaction *action, struct sigaction *old_action);
 extern int sys_sgetmask(void);
 extern int sys_ssetmask(int newMask);
+extern int sys_alarm(long seconds);
+extern int sys_sleep(long seconds);
 
 // Just for debug use
 extern int tty_read(unsigned channel, char *buf, int nr);
@@ -29,7 +31,7 @@ fn_ptr sys_call_table[] = {
     sys_waitpid,
     stub_syscall,
     stub_syscall,
-    stub_syscall, // 10
+    sys_sleep, // 10
     stub_syscall,
     stub_syscall,
     stub_syscall,

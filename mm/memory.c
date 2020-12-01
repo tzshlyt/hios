@@ -26,6 +26,8 @@
 #include <serial_debug.h>
 #include <linux/mm.h>
 
+// #define DEBUG
+
 #define LOW_MEM 0x100000ul                      // 内存低1MB，是系统代码所在
 #define PAGING_MEMORY (15*1024*1024)            // 分页内存15MB，主内存区最多15M
 #define PAGING_PAGES (PAGING_MEMORY >> 12)      // 分页后物理内存页数(3840)
@@ -321,7 +323,9 @@ void write_verify(unsigned long address) {
 // 本函数供 do_wp_page() 调用。
 // table_entry: 为页表项物理地址。[up_wp_page -- Un-Write Protect Page]
 void un_wp_page(unsigned long *table_entry) {
+#ifdef DEBUG
     s_printk("un_wp_page(0x%x) ", table_entry);
+#endif
     unsigned long old_page, new_page;
     // 首先取参数指定的页表项中物理页面位置(地址)并判断该页面是否是共享页面。
     // 如果原页面地址大于内存低端LOW_MEM（表示在主内存区中），并且其在页面映射字节
@@ -330,9 +334,13 @@ void un_wp_page(unsigned long *table_entry) {
     // 被一个进程使用，并且不是内核中的进程，就直接把属性改为可写即可，不用再重
     // 新申请一个新页面。
     old_page = *table_entry & 0xfffff000;
+#ifdef DEBUG
     s_printk("old_page = 0x%x\n", old_page);
+#endif
     if (old_page >= LOW_MEM && mem_map[MAP_NR(old_page)] == 1) {    // 页面没有被共享
+#ifdef DEBUG
         s_printk("Above 1MB\n");
+#endif
         *table_entry |= 2;      // 置位 R/W
         invalidate();
         return;
@@ -372,7 +380,9 @@ void un_wp_page(unsigned long *table_entry) {
 // address - 页面线性地址
 // 写共享页面时，需复制页面（写时复制）
 void do_wp_page(unsigned long error_code, unsigned long address) {
+#ifdef DEBUG
     s_printk("Page Fault(Write) at [0x%x], errono %d\n", address, error_code);
+#endif
     error_code = error_code; // 纯粹为了消除警告
     // 调用上面函数 un_wp_page() 来处理取消页面保护。但首先需要为其准备好参数。
     // 参数是 线性地址address 指定页面在页表中的 页表项物理地址，
@@ -396,7 +406,9 @@ void do_wp_page(unsigned long error_code, unsigned long address) {
     un_wp_page((unsigned long *)
 		(((address>>10) & 0xffc) + (0xfffff000 &
 		*((unsigned long *) ((address>>20) &0xffc)))));
+#ifdef DEBUG
     mm_print_pageinfo(address);
+#endif
 }
 
 // TODO: 未完成
@@ -410,8 +422,9 @@ void do_wp_page(unsigned long error_code, unsigned long address) {
 void do_no_page(unsigned long error_code, unsigned long address) {
     // unsigned long tmp;
     unsigned long page;
-
+#ifdef DEBUG
     s_printk("Page Fault at [0x%x], errono %d\n", address, error_code);
+#endif
     address &= 0xfffff000;
     if (!(page = get_free_page()))
         oom();
@@ -469,7 +482,9 @@ void do_no_page(unsigned long error_code, unsigned long address) {
 
 */
 int copy_page_tables(unsigned long from, unsigned long to, unsigned long size) {
+#ifdef DEBUG
     s_printk("copy_page_tables(0x%x, 0x%x, 0x%x)\n", from, to, size);
+#endif
     unsigned long * from_page_table;
     unsigned long * to_page_table;
     unsigned long this_page;

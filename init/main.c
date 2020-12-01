@@ -23,6 +23,7 @@ static inline int sys_debug(char *str) __attribute__((always_inline));
 static inline _syscall0(int, fork)
 static inline _syscall0(int, pause)
 static inline _syscall1(int, sys_debug, char *, str)
+static inline _syscall1(int, sleep, long, seconds)
 
 // 移动到用户模式
 // 所使用的方法是模拟中断调用返回过程，即利用 iret 指令来实现特权级的变更和堆栈的切换
@@ -121,34 +122,35 @@ void init() {
 void sched_abcd_demo() {
     // Here init process (pid = 2) will
     // print AABB randomly
-    char buf[100] = "";
-    sys_debug("before read\n");
-    user_tty_read(0, buf, 20);
 
-    sys_debug("after read\n");
-    sys_debug(buf);
-
-    while(1);
-
-    int pid;
     if(!fork()) {
       while(1) {
             sys_debug("A");
+            char buf[100] = "";
+            sys_debug("\n>> before read\n");
+            user_tty_read(0, buf, 20);
+
+            sys_debug(">> after read\n");
+            sys_debug(buf);
+            sleep(1);
         }
     }
     if(!fork()) {
         while(1) {
             sys_debug("B");
+            sleep(2);
         }
     }
-    if(!(pid = fork())) {
+    if(!fork()) {
         while(1) {
             sys_debug("C");
+            sleep(3);
         }
     }
     if(!fork()) {
         while(1) {
             sys_debug("D");
+            sleep(4);
         }
     }
     while(1);

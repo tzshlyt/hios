@@ -18,13 +18,14 @@ extern int sys_sleep(long seconds);
 
 // Just for debug use
 extern int tty_read(unsigned channel, char *buf, int nr);
+extern int _user_tty_write(unsigned channel, char *buf, int nr);
 
 //TODO 目前除了少数syscall之外其余的syscall均为stub状态
 fn_ptr sys_call_table[] = {
     tty_read, // 0
     sys_exit,
     sys_fork,     // 2
-    stub_syscall,
+    _user_tty_write,
     stub_syscall,
     stub_syscall,
     stub_syscall,

@@ -19,6 +19,7 @@
 
 // Just for debug
 #define __NR_user_tty_read 0
+#define __NR_user_tty_write 3
 
 /* 例如
 static inline int fork(void) {

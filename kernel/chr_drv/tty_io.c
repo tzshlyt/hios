@@ -104,11 +104,6 @@ void copy_to_buffer(struct tty_struct *tty) {
     return ;
 }
 
-void tty_write(struct tty_struct *tty) {
-    tty->write(tty);
-    return;
-}
-
 static void sleep_if_empty(struct tty_queue *queue) {
 	cli();
 	while (!current->signal && EMPTY(*queue))
@@ -137,7 +132,7 @@ void wait_for_keypress(void) {
 // 返回已读字节数
 int tty_read(unsigned channel, char *buf, int nr) {
 #ifdef DEBUG
-    s_printk("tty_read channel = %d, buf = %x, nr = %d, pid = %d\n", channel, buf, nr, current->pid);
+    s_printk("tty_read channel = %d, buf = 0x%x, nr = %d, pid = %d\n", channel, buf, nr, current->pid);
 #endif
     struct tty_struct *tty;
     int len = 0;
@@ -149,25 +144,47 @@ int tty_read(unsigned channel, char *buf, int nr) {
     tty = &tty_table[channel];
     // interruptible_sleep_on(&tty->buffer.wait_proc);
     while (nr > 0){
-        while (1) {
-            if (EMPTY(tty->buffer)) {
-                sleep_if_empty(&tty->buffer);
+        if (EMPTY(tty->buffer)) {
 #ifdef DEBUG
-                s_printk("tty->buffer empty\n");
+            s_printk("tty->buffer empty to sleep\n");
 #endif
-            }
-
-            GETCH(tty->buffer, ch);
-            // put_fs_byte(ch, p++);  // TODO: 为什么不可以
-            *p++ = ch;
-            len++;
-            nr--;
-            // TODO: Change -1 to EOF
-            if (ch == '\n' || ch == -1) {
-                break;
-            }
+            sleep_if_empty(&tty->buffer);
+#ifdef DEBUG
+            s_printk("tty->buffer empty from sleep\n");
+#endif
         }
-        s_printk("Buf = %s\n", buf);
+
+        GETCH(tty->buffer, ch);
+        put_fs_byte(ch, p++);  // TODO: 为什么不可以
+        // *p++ = ch;
+        len++;
+        nr--;
+        // TODO: Change -1 to EOF
+        if (ch == '\n' || ch == -1) {
+            break;
+        }
     }
+    // s_printk("Buf = %s\n", buf);
+    // s_printk("tty_read return len = %d\n", len);
     return len;
+}
+
+void tty_write(struct tty_struct* tty) {
+    tty->write(tty);
+    return;
+}
+
+int _user_tty_write(unsigned channel, char *buf, int nr) {
+#ifdef DEBUG
+    s_printk("user_tty_write channel = %d, buf = 0x%x, nr = %d, pid = %d\n", channel, buf, nr, current->pid);
+#endif
+    int i = 0;
+    struct tty_struct *tty = &tty_table[channel];
+    for (i = 0; i < nr; i++) {
+        char c = get_fs_byte(buf + i);
+        PUTCH(c, tty->write_q);
+    }
+    tty_queue_stat(&tty->write_q);
+    tty_write(tty);
+    return nr;
 }

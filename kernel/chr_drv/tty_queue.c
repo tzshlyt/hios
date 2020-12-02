@@ -46,7 +46,7 @@ void tty_queue_stat(const struct tty_queue *q) {
     s_printk("tty queue tail = %d, head = %d\n", q->tail, q->head);
     s_printk("tty queue: [ ");
     for (i = q->tail; i != q->head; i = (i + 1) % TTY_BUF_SIZE) {
-        s_printk("%c<-", q->buf[i]);
+        s_printk("%c, ", q->buf[i]);
     }
     s_printk(" ]\n");
 }

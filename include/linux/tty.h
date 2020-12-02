@@ -6,11 +6,12 @@
 
 void tty_init();                        // tty 初始化
 int tty_read(unsigned channel, char * buf, int nr);
+int _user_tty_write(unsigned channel, char *buf, int nr);
 
 // tty 字符缓冲队列数据结构
 struct tty_queue {
     char buf[TTY_BUF_SIZE];
-    struct task_struct *wait_proc;      // 等待该缓冲区的进程列表
+    struct task_struct *wait_proc;      // 等待该s缓冲区的进程列表
     unsigned long head;
     unsigned long tail;
 };

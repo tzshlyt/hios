@@ -7,6 +7,7 @@
 #include <asm/system.h>
 #include <asm/io.h>
 #include <linux/tty.h>
+#include <linux/lib.h>
 // Use to debug serial
 #include <serial_debug.h>
 
@@ -15,6 +16,7 @@ extern void video_init(void);
 extern void sched_init(void);
 extern void mem_init(unsigned long start_mem, unsigned long end_mem);
 extern int user_tty_read(unsigned channel, char *buf, int nr);
+extern int user_tty_write(unsigned channel, char *buf, int nr);
 void init(void);
 
 static inline int fork(void) __attribute__((always_inline));
@@ -63,13 +65,13 @@ int main() {
     trap_init();
     sched_init();
     tty_init();
+    sti();              // 所有初始化完成开启中断
     printk("Welcome to Linux0.1 Kernel Mode(NO)\n");
 
     // 初始化物理页内存, 将 1MB - 16MB 地址空间的内存进行初始
     mem_init(0x100000, 0x300000);
 
     // 中断实验
-    sti(); // 开启中断
 	// asm ("int $3");
     // int k = 3/0;
 
@@ -123,33 +125,45 @@ void sched_abcd_demo() {
     // Here init process (pid = 2) will
     // print AABB randomly
 
+    char buf[100] = "TTY";
+    printf("Welcome to the OS, your are current at %x\n", sched_abcd_demo);
+    printf("Execuse me, but who are you? ");
+    getline(buf);
+    printf("%s, emm good name! Hi %s. :)\n", buf, buf);
+    printf("%s@hios$");
+    printf("This is a multi-thread demo, start in 3s ... 3");
+    sleep(1);
+    printf(".2");
+    sleep(1);
+    printf(".1");
+    sleep(1);
+    printf(".0\n");
+
     if(!fork()) {
       while(1) {
             sys_debug("A");
-            char buf[100] = "";
-            sys_debug("\n>> before read\n");
-            user_tty_read(0, buf, 20);
-
-            sys_debug(">> after read\n");
-            sys_debug(buf);
+            printf("A");
             sleep(1);
         }
     }
     if(!fork()) {
         while(1) {
             sys_debug("B");
+            printf("B");
             sleep(2);
         }
     }
     if(!fork()) {
         while(1) {
             sys_debug("C");
+            printf("C");
             sleep(3);
         }
     }
     if(!fork()) {
         while(1) {
             sys_debug("D");
+            printf("D");
             sleep(4);
         }
     }

@@ -16,7 +16,7 @@ all: lib.o
 	-S -o $*.s $
 
 
-OBJS = _exit.o wait.o
+OBJS = _exit.o wait.o getline.o printf.o
 
 
 lib.o: $(OBJS)

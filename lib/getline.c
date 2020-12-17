@@ -4,6 +4,7 @@
 #include <linux/lib.h>
 
 extern int user_tty_read(int channel, char *buf, int nr);
+_syscall3(int ,user_tty_read, int, channel, char *, buf, int, nr)
 
 static inline _syscall1(int, sys_debug, char *, str)
 

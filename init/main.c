@@ -8,15 +8,17 @@
 #include <asm/io.h>
 #include <linux/tty.h>
 #include <linux/lib.h>
+#include <linux/fs.h>
 // Use to debug serial
 #include <serial_debug.h>
+
+static unsigned long buffer_memory_end = 0;  // 高速缓冲区末端地址
+static unsigned long main_memory_start = 0;              // 主内存（将用于分页）开始的位置
 
 extern void trap_init(void);
 extern void video_init(void);
 extern void sched_init(void);
 extern void mem_init(unsigned long start_mem, unsigned long end_mem);
-extern int user_tty_read(unsigned channel, char *buf, int nr);
-extern int user_tty_write(unsigned channel, char *buf, int nr);
 void init(void);
 
 static inline int fork(void) __attribute__((always_inline));
@@ -61,15 +63,18 @@ void signal_demo_main(void);
 void sched_abcd_demo(void);
 
 int main() {
+    buffer_memory_end = 1*1024*1024;     // 设置缓冲区末端=1Mb
+    main_memory_start = buffer_memory_end;
     video_init();
     trap_init();
     sched_init();
     tty_init();
+	buffer_init(buffer_memory_end);     // 缓冲管理初始化，建内存链表等。(fs/buffer.c)
     sti();              // 所有初始化完成开启中断
     printk("Welcome to Linux0.1 Kernel Mode(NO)\n");
 
     // 初始化物理页内存, 将 1MB - 16MB 地址空间的内存进行初始
-    mem_init(0x100000, 0x300000);
+    mem_init(main_memory_start, 0x300000);
 
     // 中断实验
 	// asm ("int $3");

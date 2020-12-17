@@ -26,7 +26,7 @@
 #include <serial_debug.h>
 #include <linux/mm.h>
 
-// #define DEBUG
+#define DEBUG
 
 #define LOW_MEM 0x100000ul                      // 内存低1MB，是系统代码所在
 #define PAGING_MEMORY (15*1024*1024)            // 分页内存15MB，主内存区最多15M

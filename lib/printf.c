@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <serial_debug.h>
 
+_syscall3(int ,user_tty_write, int, channel, char *, buf, int, nr)
 extern int user_tty_write(int channel, char *buf, int nr);
 void vsprintf(char *dest, char *fmt, va_list ap);
 

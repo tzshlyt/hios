@@ -4,7 +4,7 @@
 #include <asm/segment.h>
 #include <linux/sched.h>
 
-// #define DEBUG
+#define DEBUG
 
 void do_exit(int error_code);
 

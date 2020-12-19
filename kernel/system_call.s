@@ -24,7 +24,7 @@
  */
 
 # 定义入口点
-.global timer_interrupt, system_call, sys_fork
+.global timer_interrupt, system_call, sys_fork, hd_interrupt
 
 # 堆栈中各个寄存器的偏移位置
 EAX = 0x00
@@ -187,3 +187,44 @@ sys_fork:
 	call copy_process		# 在 fork.c 中
 	addl $20, %esp			# 丢弃这里所有压栈内容
 1: 	ret
+
+### int46 - (int 0x2e)硬盘中断处理程序，响应硬件中断请求IRQ4。
+# 当请求的硬盘操作完成或出错就会发出此中断信号。
+# 首先向8259A中断控制从芯片发送结束硬件中断指令(EOI),然后取变量do_hd中的函数指针
+# 放入edx寄存器中，并置do_hd为NULL，接着判断edx函数指针是否为空。如果为空，则给edx
+# 赋值指向unexpected_hd_interrupt(),用于显示出错信息。随后向8259A主芯片送EOI指令，
+# 并调用edx中指针指向的函数：read_intr(), write_intr()或 unexpected_hd_interrupt().
+hd_interrupt:
+	pushl %eax
+	pushl %ecx
+	pushl %edx
+	push %ds
+	push %es
+	push %fs
+	movl $0x10,%eax			# ds，es指向内核数据段
+	mov %ax,%ds
+	mov %ax,%es
+	movl $0x17,%eax			# fs 置为指向局部数据段（程序的数据段）
+	mov %ax,%fs
+# 由于初始化中断控制芯片时没有采用自动EOI，所以这里需要发指令结束该硬件中断
+	movb $0x20, %al
+	outb %al, $0xA0			# EOI to interrupt controller #1
+	jmp 1f					# give port chance to breathe
+1:	jmp 1f
+# do_hd 定义为一个函数指针，将被赋值 read_intr()或 write_intr()函数地址。放到 edx
+# 寄存器后就将 do_hd 指针变量置为NULL。然后测试得到的函数指针，若该指针为空，则
+# 赋予该指针指向C函数 unexpected_hd_interrupt()，以处理未知硬盘中断。
+1:	xorl %edx, %edx
+	xchgl do_hd, %edx
+	testl %edx, %edx						# 测试函数指针是否为NULL
+	jne 1f									# 若空，则使指针指向C函数 unexpected_hd_interrup().
+	movl $unexpected_hd_interrupt, %edx
+1:	outb %al, $0x20							# 送主8259A中断控制器EOI命令(结束硬件中断)
+	call *%edx 								# "interesting" way of handling intr.
+	pop %fs                     			# 上句调用 do_hd 指向C函数
+	pop %es
+	pop %ds
+	popl %edx
+	popl %ecx
+	popl %eax
+	iret

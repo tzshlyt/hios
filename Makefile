@@ -13,7 +13,7 @@ all: Image
 
 OBJS = boot/head.o init/main.o
 ARCHIVES=kernel/kernel.o mm/mm.o fs/fs.o
-DRIVERS = kernel/chr_drv/chr_drv.a
+DRIVERS = kernel/blk_drv/blk_drv.a kernel/chr_drv/chr_drv.a
 LIBS = lib/lib.o
 
 system: $(OBJS) $(ARCHIVES) $(DRIVERS) $(LIBS)
@@ -23,6 +23,9 @@ system: $(OBJS) $(ARCHIVES) $(DRIVERS) $(LIBS)
 
 kernel/chr_drv/chr_drv.a:
 	@make -C kernel/chr_drv/
+
+kernel/blk_drv/blk_drv.a:
+	@make -C kernel/blk_drv/
 
 kernel/kernel.o:
 	@make -C kernel

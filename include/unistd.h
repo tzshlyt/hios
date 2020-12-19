@@ -1,6 +1,10 @@
 #ifndef _UNISTD_H
 #define _UNISTD_H
 
+#ifndef NULL
+#define NULL    ((void *)0)
+#endif
+
 #include <sys/types.h>
 
 #ifdef __LIBRARY__

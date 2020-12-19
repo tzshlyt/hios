@@ -19,6 +19,7 @@ extern void trap_init(void);
 extern void video_init(void);
 extern void sched_init(void);
 extern void mem_init(unsigned long start_mem, unsigned long end_mem);
+extern void hd_init(void);
 void init(void);
 
 static inline int fork(void) __attribute__((always_inline));
@@ -70,6 +71,7 @@ int main() {
     sched_init();
     tty_init();
 	buffer_init(buffer_memory_end);     // 缓冲管理初始化，建内存链表等。(fs/buffer.c)
+    hd_init();
     sti();              // 所有初始化完成开启中断
     printk("Welcome to Linux0.1 Kernel Mode(NO)\n");
 
@@ -91,14 +93,15 @@ int main() {
 
     // fork still not work
     if(!fork()) {   // fork() 返回1(子进程pid), !1为假，所以进程0继续执行 else 的代码
-        // 进程 1
-        if(!fork()) {
-            // 进程 2
-            sched_abcd_demo();
-        } else {
-            signal_demo_main();
-        }
-        while(1);
+        init();
+        // // 进程 1
+        // if(!fork()) {
+        //     // 进程 2
+        //     sched_abcd_demo();
+        // } else {
+        //     signal_demo_main();
+        // }
+        // while(1);
     }
 
     // 在Linux0.11的进程调度机制中，有两种情况可以产生进程切换。
@@ -116,14 +119,16 @@ int main() {
 
 void init() {
     // pid = 1
-    // 为什么不在进程0和进程1中打印，因为schedule()跳过进程0
-    if(!fork()) {
-        while(1)
-            sys_debug("A");
-    } else {
-        while(1)
-            sys_debug("B");
-    }
+    int pid, i;
+
+    // // 为什么不在进程0和进程1中打印，因为schedule()跳过进程0
+    // if(!fork()) {
+    //     while(1)
+    //         sys_debug("A");
+    // } else {
+    //     while(1)
+    //         sys_debug("B");
+    // }
 }
 
 void sched_abcd_demo() {

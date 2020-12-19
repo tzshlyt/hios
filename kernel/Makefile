@@ -20,3 +20,4 @@ kernel.o: $(OBJS)
 clean:
 	rm -f *.o
 	make -C chr_drv clean
+	make -C blk_drv clean

@@ -30,6 +30,13 @@ static inline _syscall0(int, pause)
 static inline _syscall1(int, sys_debug, char *, str)
 static inline _syscall1(int, sleep, long, seconds)
 
+// 下面三行分别将指定的线性地址强行转换为给定数据类型的指针，并获取指针所指的内容。
+// 由于内核代码段被映射到从物理地址零开始的地方，因此这些线性地址
+// 正好也是对应的物理地址。这些指定地址处内存值的含义请参见setup程序读取并保存的参数。
+#define EXT_MEM_K (*(unsigned short *)0x90002)
+#define DRIVE_INFO (*(struct drive_info *)0x90080)
+#define ORIG_ROOT_DEV (*(unsigned short *)0x901FC)
+
 // 移动到用户模式
 // 所使用的方法是模拟中断调用返回过程，即利用 iret 指令来实现特权级的变更和堆栈的切换
 // 压栈顺序与通常中断时硬件的压栈动作一样
@@ -63,7 +70,10 @@ int mmtest_main(void);
 void signal_demo_main(void);
 void sched_abcd_demo(void);
 
+struct drive_info { char dummy[32]; } drive_info;       // 用于存放硬盘参数表信息
+
 int main() {
+    drive_info = DRIVE_INFO;
     buffer_memory_end = 1*1024*1024;     // 设置缓冲区末端=1Mb
     main_memory_start = buffer_memory_end;
     video_init();
@@ -120,6 +130,11 @@ int main() {
 void init() {
     // pid = 1
     int pid, i;
+
+    // setup()是一个系统调用。用于读取硬盘参数包括分区表信息并加载虚拟盘(若存在的话)
+    // 和安装根文件系统设备。该函数用25行上的宏定义，对应函数是sys_setup()，在块设备
+    // 子目录kernel/blk_drv/hd.c中。
+    // setup((void *) &drive_info);
 
     // // 为什么不在进程0和进程1中打印，因为schedule()跳过进程0
     // if(!fork()) {

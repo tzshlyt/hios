@@ -11,6 +11,11 @@
 
 extern void hd_interrupt(void);
 
+int sys_setup(void * BIOS) {
+    s_printk("sys_setup()\n");
+    return 0;
+}
+
 static void read_intr(void) {
     s_printk("read_intr()\n");
 }

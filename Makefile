@@ -4,6 +4,9 @@ include Makefile.header
 # $< = first dependency
 # $^ = all dependencies
 
+# indicate the Hardware Image file
+HDA_IMG = hdc-0.11.img
+
 LDFLAGS += -Ttext 0 -e startup_32 -nostdlib
 
 .PHONY=clean run all
@@ -59,13 +62,13 @@ Image: boot/bootsect boot/setup system
 	@echo "Build bootimg done"
 
 run: Image
-	$(QEMU) -m 16M -boot a -fda Image -serial stdio
+	$(QEMU) -m 16M -boot a -fda Image -hda $(HDA_IMG) -serial stdio
 
 run-bochs: Image
 	$(BOCHS) -q
 
 debug:
-	$(QEMU) -m 16M -boot a -fda Image -S -s &
+	$(QEMU) -m 16M -boot a -fda Image -hda $(HDA_IMG) -S -s &
 	gdb -ex "target remote :1234" -ex "symbol-file system.sym"
 
 

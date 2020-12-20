@@ -1,4 +1,5 @@
 floppya: 1_44="./Image", status=inserted
 megs: 16
 boot: floppy
+ata0-master: type=disk, path="hdc-0.11.img", mode=flat
 display_library: x, options="gui_debug"

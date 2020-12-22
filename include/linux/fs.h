@@ -66,5 +66,11 @@ struct buffer_head {
 
 extern int nr_buffers;
 
+extern void sync_inodes(void);
+extern void ll_rw_block(int rw, struct buffer_head * bh);
+extern void brelse(struct buffer_head * buf);
+extern struct buffer_head * bread(int dev,int block);
+
+extern void mount_root(void);
 
 #endif

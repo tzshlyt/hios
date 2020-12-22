@@ -1,6 +1,6 @@
 include ../../Makefile.header
 
-OBJS = hd.o	ll_rw_blk.o
+OBJS = hd.o	ll_rw_blk.o ramdisk.o
 
 LDFLAGS	+= -r
 CFLAGS += -I../../include

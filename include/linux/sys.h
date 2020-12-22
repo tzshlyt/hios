@@ -3,6 +3,7 @@
 
 #include<linux/sched.h>
 
+extern int sys_setup();
 extern int sys_exit();
 extern int sys_fork();
 extern int sys_waitpid();
@@ -22,11 +23,11 @@ extern int _user_tty_write(unsigned channel, char *buf, int nr);
 
 //TODO 目前除了少数syscall之外其余的syscall均为stub状态
 fn_ptr sys_call_table[] = {
-    tty_read, // 0
+    sys_setup,
     sys_exit,
     sys_fork,     // 2
     _user_tty_write,
-    stub_syscall,
+    tty_read,
     stub_syscall,
     stub_syscall,
     sys_waitpid,

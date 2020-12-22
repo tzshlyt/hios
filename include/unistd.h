@@ -9,6 +9,7 @@
 
 #ifdef __LIBRARY__
 
+#define __NR_setup      0
 #define __NR_exit       1
 #define __NR_fork       2
 #define __NR_waitpid	7
@@ -22,7 +23,7 @@
 #define __NR_sys_debug  72
 
 // Just for debug
-#define __NR_user_tty_read 0
+#define __NR_user_tty_read 4
 #define __NR_user_tty_write 3
 
 /* 例如

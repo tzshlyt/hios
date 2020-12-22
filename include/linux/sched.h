@@ -14,9 +14,9 @@
 #define FIRST_TASK task[0]
 #define LAST_TASK task[NR_TASKS-1]
 
-#include<linux/mm.h>
-#include<linux/head.h>
-#include<signal.h>
+#include <linux/mm.h>
+#include <linux/head.h>
+#include <signal.h>
 
 // 定义任务状态
 // 可中断等待状态: 如果产生某种中断，或其他进程给这个进程发送特定信号等，仍然有可能将这个进程的状态改设为就绪状态，

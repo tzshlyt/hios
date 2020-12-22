@@ -68,8 +68,8 @@ run-bochs: Image
 	$(BOCHS) -q
 
 debug:
-	$(QEMU) -m 16M -boot a -fda Image -hda $(HDA_IMG) -S -s &
-	gdb -ex "target remote :1234" -ex "symbol-file system.sym"
+	$(QEMU) -m 16M -boot a -fda Image -hda $(HDA_IMG) -S -gdb tcp::1235 &
+	gdb -ex "target remote :1235" -ex "symbol-file system.sym"
 
 
 clean:

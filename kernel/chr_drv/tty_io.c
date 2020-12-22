@@ -111,14 +111,14 @@ static void sleep_if_empty(struct tty_queue *queue) {
 	sti();
 }
 
-static void sleep_if_full(struct tty_queue *queue) {
-	if (!FULL(*queue))
-		return;
-	cli();
-	while (!current->signal && LEFT(*queue)<128)
-		interruptible_sleep_on(&queue->wait_proc);
-	sti();
-}
+// static void sleep_if_full(struct tty_queue *queue) {
+// 	if (!FULL(*queue))
+// 		return;
+// 	cli();
+// 	while (!current->signal && LEFT(*queue)<128)
+// 		interruptible_sleep_on(&queue->wait_proc);
+// 	sti();
+// }
 
 void wait_for_keypress(void) {
 	sleep_if_empty(&tty_table[0].buffer);

@@ -18,6 +18,7 @@ static unsigned long main_memory_start = 0;              // 主内存（将用�
 extern void trap_init(void);
 extern void video_init(void);
 extern void sched_init(void);
+extern void blk_dev_init(void);
 extern void mem_init(unsigned long start_mem, unsigned long end_mem);
 extern void hd_init(void);
 void init(void);
@@ -27,6 +28,7 @@ static inline int pause(void) __attribute__((always_inline));
 static inline int sys_debug(char *str) __attribute__((always_inline));
 static inline _syscall0(int, fork)
 static inline _syscall0(int, pause)
+static inline _syscall1(int, setup, void *, BIOS)
 static inline _syscall1(int, sys_debug, char *, str)
 static inline _syscall1(int, sleep, long, seconds)
 
@@ -81,6 +83,7 @@ int main() {
     sched_init();
     tty_init();
 	buffer_init(buffer_memory_end);     // 缓冲管理初始化，建内存链表等。(fs/buffer.c)
+    blk_dev_init();                     // 块设备初始化,kernel/blk_drv/ll_rw_blk.c
     hd_init();
     sti();              // 所有初始化完成开启中断
     printk("Welcome to Linux0.1 Kernel Mode(NO)\n");
@@ -129,12 +132,12 @@ int main() {
 
 void init() {
     // pid = 1
-    int pid, i;
+    // int pid, i;
 
     // setup()是一个系统调用。用于读取硬盘参数包括分区表信息并加载虚拟盘(若存在的话)
     // 和安装根文件系统设备。该函数用25行上的宏定义，对应函数是sys_setup()，在块设备
     // 子目录kernel/blk_drv/hd.c中。
-    // setup((void *) &drive_info);
+    setup((void *) &drive_info);
 
     // // 为什么不在进程0和进程1中打印，因为schedule()跳过进程0
     // if(!fork()) {

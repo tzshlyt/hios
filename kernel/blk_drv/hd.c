@@ -107,16 +107,91 @@ int sys_setup(void * BIOS) {
     return 0;
 }
 
+// 判断并循环等待硬盘控制器就续
+// 由于现在 PC 机速度很快，因此可以加大一些循环次数
+static int controller_ready(void) {
+	int retries=100000;
+
+	while (--retries && (inb_p(HD_STATUS)&0x80));
+	return (retries);
+}
+
 static void read_intr(void) {
     s_printk("read_intr()\n");
 }
 
 static void write_intr(void) {
     s_printk("write_intr()\n");
+
 }
 
+static void hd_out(unsigned int drive, unsigned int nsect, unsigned int sect,
+		unsigned int head, unsigned int cyl, unsigned int cmd,
+		void (*intr_addr)(void))
+{
+	register int port asm("dx");                // 定义局部寄存器变量并存放在指定寄存器 dx 中
+
+    // 驱动器号 drive 只能是 0 和 1， 磁头号不能 > 15
+	if (drive > 1 || head > 15)
+		panic("Trying to write bad sector");
+	if (!controller_ready())
+		panic("HD controller not ready");
+	do_hd = intr_addr;                          // 硬盘中断发生时将调用的c函数指针 do_hd
+	outb_p(hd_info[drive].ctl, HD_CMD);         // 向控制寄存器输出控制字节
+	port = HD_DATA;                             // 置dx为数据寄存器端口(0x1f0)
+	outb_p(hd_info[drive].wpcom>>2, ++port);    // 参数:写预补偿柱面号(需除4)
+	outb_p(nsect, ++port);                      // 参数:读/写扇区总数
+	outb_p(sect, ++port);                       // 参数:起始扇区
+	outb_p(cyl, ++port);                        // 参数:柱面号低8位
+	outb_p(cyl>>8, ++port);                     // 参数:柱面号高8位
+	outb_p(0xA0|(drive<<4)|head, ++port);       // 参数:驱动器号+磁头号
+	outb(cmd,++port);                           // 命令:硬盘控制命令
+}
+
+//// 执行硬盘读写请求操作。
+// 该函数根据设备当前请求项中的设备号和起始扇区号信息首先计算得到对应硬盘上的柱面号、当前磁道中扇区号、磁头号数据，
+// 然后再根据请求项中的命令(READ/WRITE)对硬盘发送相应读/写命令。
+// 若控制器复位标志或硬盘重新校正标志已被置位，那么首先会去执行复位或重新校正操作。
+// 若请求项此时是块设备的第1个(原来设备空闲)，则块设备当前请求项指针会直接指向该请求项(参见11_rw_b1k.c)，并会立刻调用本函数执行读写操作。
+// 否则在一个读写操作完成而引发的硬盘中断过程中，若还有请求项需要处理，则也会在硬盘中断过程中调用本函数。参考kernel/system call.s
 void do_hd_request(void) {
     s_printk("do_hd_request()\n");
+    int i,r = 0;
+	unsigned int block,dev;
+	unsigned int sec,head,cyl;
+	unsigned int nsect;
+
+    // 首先检测请求项合法性
+    INIT_REQUEST;
+    dev = MINOR(CURRENT->dev);          // 子设备号即对应硬盘上各分区
+	block = CURRENT->sector;            // 请求的起始扇区
+
+    if (dev >= 5*NR_HD || block + 2 > hd[dev].nr_sects) {   // 一次要求读写一块数据（2个扇区）
+        end_request(0);
+        goto repeat;
+    }
+
+    block += hd[dev].start_sect;        // 获取磁盘的绝对扇区号
+    dev /= 5;                           // 此时 dev 代表硬盘号(硬盘 0 还是硬盘 1)
+    // 根据绝对扇区号 block 和硬盘号 dev，计数磁道中扇区号（sec）、所在柱面号（cyl）、和磁头号（head）
+    // 初始时 eax = block, edx = 0,
+    // divl 指令把 edx:eax组成的扇区号除以每磁道扇区数 hd_info[dev].sect, 所得整数保存在eax中，余数在edx中，
+    // 其中 eax 中是到指定位置对应总磁道数，edx中是当前磁道上扇区号
+    __asm__("divl %4":"=a" (block),"=d" (sec):"0" (block),"1" (0),
+		"r" (hd_info[dev].sect));
+    // 初始时 eax = 计数出的总磁道数，edx = 0，hd_info[dev].head 硬盘总磁头数
+    // 其中 eax 中是柱面号，edx中是当前磁头号 head
+	__asm__("divl %4":"=a" (cyl),"=d" (head):"0" (block),"1" (0),
+		"r" (hd_info[dev].head));
+	sec++;                              // 对计数所得当前磁道扇区号进行调整
+	nsect = CURRENT->nr_sectors;        // 欲读写的扇区数
+
+    if (CURRENT->cmd == WRITE) {
+
+	} else if (CURRENT->cmd == READ) {
+		hd_out(dev, nsect, sec, head, cyl, WIN_READ, &read_intr);
+	} else
+		panic("unknown hd-command");
 }
 
 void unexpected_hd_interrupt(void) {

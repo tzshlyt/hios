@@ -62,9 +62,26 @@ extern struct blk_dev_struct blk_dev[NR_BLK_DEV];
 #define DEVICE_ON(device)                       // 硬盘一直在工作，无须开启和关闭
 #define DEVICE_OFF(device)
 
+#define CURRENT (blk_dev[MAJOR_NR].current_request)
+
 #ifdef DEVICE_INTR
 void (*DEVICE_INTR)(void) = NULL;
 #endif
+
+static inline void end_request(int uptodate) {
+
+}
+
+#define INIT_REQUEST \
+repeat: \
+	if (!CURRENT) \
+		return; \
+	if (MAJOR(CURRENT->dev) != MAJOR_NR) \
+		panic(DEVICE_NAME ": request list destroyed"); \
+	if (CURRENT->bh) { \
+		if (!CURRENT->bh->b_lock) \
+			panic(DEVICE_NAME ": block not locked"); \
+	}
 
 #endif
 

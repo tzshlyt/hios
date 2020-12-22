@@ -53,18 +53,18 @@ int video_gety() {
 void update_cursor(int row, int col) {
     unsigned int pos = ((unsigned int)row * VIDEO_X_SZ) + (unsigned int)col;
     // LOW Cursor port to VGA Index Registe
-    outb(REG_SCREEN_CTRL, 0x0f);
-    outb(REG_SCREEN_DATA, (unsigned char)(pos & 0xff));
+    outb(0x0f, REG_SCREEN_CTRL);
+    outb((unsigned char)(pos & 0xff), REG_SCREEN_DATA);
     // High Cursor port to VGA Index Registe
-    outb(REG_SCREEN_CTRL, 0x0e);
-    outb(REG_SCREEN_DATA, (unsigned char)((pos >> 8) & 0xff));
+    outb(0x0e, REG_SCREEN_CTRL);
+    outb((unsigned char)((pos >> 8) & 0xff), REG_SCREEN_DATA);
 }
 
 int get_cursor() {
     int offset;
-    outb(REG_SCREEN_CTRL, 0x0f);
+    outb(0x0f, REG_SCREEN_CTRL);
     offset = inb(REG_SCREEN_DATA) << 8;
-    outb(REG_SCREEN_CTRL, 0x0e);
+    outb(0x0e, REG_SCREEN_CTRL);
     offset += inb(REG_SCREEN_DATA);
     return offset;
 }
@@ -166,8 +166,8 @@ void memcpy(char *dest, char *src, int count, int size) {
 void con_init() {
     register unsigned char a;
     set_trap_gate(0x21, &keyboard_interrupt);
-    outb_p(0x21, inb_p(0x21)&0xfd);        // 取消对键盘中断的屏蔽，允许IRQ1。
+    outb_p(inb_p(0x21)&0xfd, 0x21);        // 取消对键盘中断的屏蔽，允许IRQ1。
     a = inb_p(0x61);                        // 读取键盘端口 0x61 (8255A端口PB)
-	outb_p(0x61, a|0x80);                   // 设置禁止键盘工作（位7置位）
-	outb(0x61, a);                          // 再允许键盘工作，用以复位键盘
+	outb_p(a|0x80, 0x61);                   // 设置禁止键盘工作（位7置位）
+	outb(a, 0x61);                          // 再允许键盘工作，用以复位键盘
 }

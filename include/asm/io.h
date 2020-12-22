@@ -5,11 +5,11 @@ __asm__ volatile("inb %%dx, %%al":"=a" (_v):"d" (port)); \
 _v; \
     })
 
-#define outb(port, value) \
+#define outb(value, port) \
     __asm__ ("outb %%al, %%dx"::"a" (value), "d" (port));
 
 // 带有延时的outb
-#define outb_p(port, value) \
+#define outb_p(value, port) \
     __asm__ volatile("outb %%al, %%dx\n\t" \
             "jmp 1f\n\t" \
             "1: jmp 1f\n\t" \

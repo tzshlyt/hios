@@ -9,7 +9,7 @@ int is_transmit_empty() {
 void s_putchar(char a) {
     while (is_transmit_empty() == 0);
 
-    outb(PORT,a);
+    outb(a, PORT);
 }
 
 void s_puts(char *a) {

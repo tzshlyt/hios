@@ -13,7 +13,7 @@
 // 读CMOS参数宏函数。
 // 这段宏读取CMOS中硬盘信息。与init/main.c中读取 CMOS 时钟信息的宏完全一样。
 #define CMOS_READ(addr) ({ \
-outb_p(0x70, 0x80|addr); \
+outb_p(0x80|addr, 0x70); \
 inb_p(0x71); \
 })
 
@@ -134,6 +134,6 @@ void hd_init() {
     s_printk("hd_init()\n");
     blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;      // do_hd_request()
 	set_intr_gate(0x2E, &hd_interrupt);
-	outb_p(0x21, inb_p(0x21)&0xfb);                      // 复位接联的主8259A int2的屏蔽位
-	outb(0xA1, inb_p(0xA1)&0xbf);                        // 复位硬盘中断请求屏蔽位(在从片上)
+	outb_p(inb_p(0x21)&0xfb, 0x21);                      // 复位接联的主8259A int2的屏蔽位
+	outb(inb_p(0xA1)&0xbf, 0xA1);                        // 复位硬盘中断请求屏蔽位(在从片上)
 }

@@ -164,8 +164,8 @@ void trap_init(void) {
     }
     // 设置协处理器中断0x2d(45)陷阱门描述符，并允许其产生中断请求。设置并行口中断描述符
     set_trap_gate(45, &irq13);
-    outb_p(0x21, inb_p(0x21)&0xfb);  // 允许8259A主芯片的IRQ2中断请求。
-	outb(0xA1, inb_p(0xA1)&0xdf);    // 允许8259A从芯片的IRQ3中断请求。
+    outb_p(inb_p(0x21)&0xfb, 0x21);  // 允许8259A主芯片的IRQ2中断请求。
+	outb(inb_p(0xA1)&0xdf, 0xA1);    // 允许8259A从芯片的IRQ3中断请求。
     set_trap_gate(39, &parallel_interrupt); // 设置并行口1的中断0x27陷阱门的描述符
 }
 

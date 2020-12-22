@@ -275,16 +275,16 @@ void sched_init() {
     // 初始化8253定时器。通道0，选择工作方式3，二进制计数方式。
     // 通道0的输出引脚接在中断控制主芯片的IRQ0上，它每10毫秒发出一个IRQ0请求。
     // LATCH是初始定时计数值。
-    outb_p(0x43, 0x36);                     /* binary, mode 3, LSB/MSB, ch 0 */
-    outb_p(0x40, divisor & 0xFF);           /* LSB */
-    outb_p(0x40, divisor >> 8);             /* MSB */
+    outb_p(0x36, 0x43);                     /* binary, mode 3, LSB/MSB, ch 0 */
+    outb_p(divisor & 0xFF, 0x40);           /* LSB */
+    outb_p(divisor >> 8, 0x40);             /* MSB */
 
     // 设置时钟中断处理程序句柄(设置时钟中断门)。修改中断控制器屏蔽码，允许时钟中断。
     // 然后设置系统调用中断门。这两个设置中断描述符表 IDT 中描述符在宏定义在文件 include/asm/system.h中
     // timer interrupt gate setup: INT 0x20
     set_intr_gate(0x20, &timer_interrupt);
     // Make 8259 accept timer interrupt
-    outb(0x21, inb_p(0x21) & ~0x01);
+    outb(inb_p(0x21)&~0x01, 0x21);
     // system_call
     set_system_gate(0x80, &system_call);
 }

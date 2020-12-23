@@ -26,6 +26,12 @@ static struct task_struct * buffer_wait = NULL;     // 等待空闲缓冲块而�
 // 初始化之后不再改变的“变量”。它将在后面的缓冲区初始化函数buffer_init中被设置。
 int NR_BUFFERS = 0;                                 // 系统含有缓冲区块的个数
 
+void check_disk_change(int dev) {
+	if (MAJOR(dev) != 2)
+		return;
+	// TODO: check whether a floppy has bean changed
+}
+
 // 下面两行代码是hash（散列）函数定义和Hash表项的计算宏
 // hash表的主要作用是减少查找比较元素所花费的时间。通过在元素的存储位置与关
 // 键字之间建立一个对应关系(hash函数)，我们就可以直接通过函数计算立刻查询到指定

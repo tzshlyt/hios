@@ -75,6 +75,7 @@ void sched_abcd_demo(void);
 struct drive_info { char dummy[32]; } drive_info;       // 用于存放硬盘参数表信息
 
 int main() {
+    ROOT_DEV = ORIG_ROOT_DEV;            // 根设备号ROOT_DEV, 已在前面包含进的fs.h文件中声明为 extern int
     drive_info = DRIVE_INFO;
     buffer_memory_end = 1*1024*1024;     // 设置缓冲区末端=1Mb
     main_memory_start = buffer_memory_end;

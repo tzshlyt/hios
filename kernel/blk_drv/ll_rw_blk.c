@@ -150,6 +150,7 @@ repeat:
 	add_request(major+blk_dev, req);
 }
 
+// 低层读写数据块
 void ll_rw_block(int rw, struct buffer_head * bh) {
 	int major;
 

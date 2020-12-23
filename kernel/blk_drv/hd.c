@@ -17,7 +17,12 @@ outb_p(0x80|addr, 0x70); \
 inb_p(0x71); \
 })
 
+/* Max read/write errors/sector */
+#define MAX_ERRORS	7
 #define MAX_HD		2               // 系统支持的最多硬盘数
+
+static int recalibrate = 0;         // 重新校正标志
+static int reset = 0;               // 复位标志
 
 // 硬盘信息结构 (Harddisk information struct)。
 // 各字段分别是磁头数、每磁道扇区数、柱面数、写前预补偿柱面号、磁头着陆区柱面号、控制字节。
@@ -34,6 +39,9 @@ static struct hd_struct {
 	long start_sect;        // 分区在硬盘中起始物理（绝对）扇区
 	long nr_sects;          // 分区中扇区总数
 } hd[5*MAX_HD]={{0,0},};
+
+#define port_read(port, buf, nr) \
+__asm__("cld;rep;insw"::"d" (port),"D" (buf),"c" (nr))
 
 extern void hd_interrupt(void);
 extern void rd_load(void);
@@ -101,7 +109,7 @@ int sys_setup(void * BIOS) {
     // 如果有(此时该启动盘称为集成盘)则尝试把该映像加载并存放到虚拟盘中，然后把此时的根文件系统设备号 ROOT_DEV 修改成虚拟盘的设备号。
     // 最后安装根文件系统(fs/super.c)。
     if (NR_HD)
-		printk("Partition table%s ok.\n\r",(NR_HD>1)?"s":"");
+		printk("Partition table%s ok.\n",(NR_HD>1)?"s":"");
 	rd_load();
 	mount_root();
     return 0;
@@ -116,10 +124,52 @@ static int controller_ready(void) {
 	return (retries);
 }
 
-static void read_intr(void) {
-    s_printk("read_intr()\n");
+// 检测硬盘执行命令后的状态
+static int win_result(void) {
+	int i = inb_p(HD_STATUS);
+
+	if ((i & (BUSY_STAT | READY_STAT | WRERR_STAT | SEEK_STAT | ERR_STAT))
+		== (READY_STAT | SEEK_STAT))
+		return(0); /* ok */
+	if (i&1) i = inb(HD_ERROR);
+	return (1);
 }
 
+
+// 读写硬盘失败处理调用函数
+// 如果读扇区时的出错次数大于或等于7次时，则结束当前请求项并唤醒等待该请求的进程，而且对应缓冲区更新标志复位，表示数据没有更新。
+// 如果读一扇区时的出错次数已经大于3次，则要求执行复位硬盘控制器操作(设置复位标志)。
+static void bad_rw_inter(void) {
+    if (++CURRENT->errors >= MAX_ERRORS)
+		end_request(0);
+	if (CURRENT->errors > MAX_ERRORS/2)
+		reset = 1;
+}
+
+// 读操作中断调用函数
+static void read_intr(void) {
+    s_printk("read_intr()\n");
+    // 错误检测
+    if (win_result()) {
+        bad_rw_inter();
+        do_hd_request();        // 再次请求硬盘作相应（复位）处理
+        return;
+    }
+    // 连续读入扇区数据到请求项的缓冲区
+    port_read(HD_DATA, CURRENT->buffer, 256);   // 256是指内存字，即512字节
+    CURRENT->errors = 0;
+    CURRENT->buffer += 512;
+    CURRENT->sector++;
+    if (--CURRENT->nr_sectors) {
+        do_hd = &read_intr;         // 等待硬盘在读出另1个扇区数据后发出中断并再次调用本函数
+        return;
+    }
+    // 全部扇区读完
+    end_request(1);                 // 数据已更新标志置位
+    do_hd_request();
+}
+
+// 写操作中断调用函数
 static void write_intr(void) {
     s_printk("write_intr()\n");
 
@@ -185,6 +235,14 @@ void do_hd_request(void) {
 		"r" (hd_info[dev].head));
 	sec++;                              // 对计数所得当前磁道扇区号进行调整
 	nsect = CURRENT->nr_sectors;        // 欲读写的扇区数
+
+    if (reset) {
+
+    }
+
+    if (recalibrate) {
+
+    }
 
     if (CURRENT->cmd == WRITE) {
 

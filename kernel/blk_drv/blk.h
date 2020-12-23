@@ -51,6 +51,7 @@ struct blk_dev_struct {
 };
 
 extern struct blk_dev_struct blk_dev[NR_BLK_DEV];
+extern struct task_struct * wait_for_request;
 
 #ifdef MAJOR_NR                                 // 主设备号
 
@@ -68,8 +69,29 @@ extern struct blk_dev_struct blk_dev[NR_BLK_DEV];
 void (*DEVICE_INTR)(void) = NULL;
 #endif
 
-static inline void end_request(int uptodate) {
+// 解锁缓冲区块
+static inline void unlock_buffer(struct buffer_head * bh) {
+	if (!bh->b_lock)
+		printk(DEVICE_NAME ": free buffer being unlocked\n");
+	bh->b_lock = 0;
+	wake_up(&bh->b_wait);                       // 唤醒等待该缓冲区的进程
+}
 
+static inline void end_request(int uptodate) {
+    DEVICE_OFF(CURRENT->dev);                   // 关闭设备
+    if (CURRENT->bh) {
+        CURRENT->bh->b_uptodate = uptodate;     // 置更新标志
+        unlock_buffer(CURRENT->bh);             // 解锁缓冲区
+    }
+	if (!uptodate) {
+		printk(DEVICE_NAME " I/O error\n\r");
+		printk("dev %04x, block %d\n\r", CURRENT->dev,
+			CURRENT->bh->b_blocknr);
+	}
+	wake_up(&CURRENT->waiting);
+	wake_up(&wait_for_request);
+	CURRENT->dev = -1;
+	CURRENT = CURRENT->next;
 }
 
 #define INIT_REQUEST \

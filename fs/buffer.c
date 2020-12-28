@@ -274,7 +274,7 @@ struct buffer_head * bread(int dev,int block) {
     // 在高速缓冲区中申请一块缓冲块。如果返回值是NULL，则表示内核出错，停机。
     // 然后我们判断其中是否已有可用数据。如果该缓冲块中数据是有效的（已更新）可以直接使用，则返回。
 	if (!(bh = getblk(dev, block)))
-		panic("bread: getblk returned NULL\n");
+		panic("bread: getblk returned NULL");
 	if (bh->b_uptodate)			// 数据有效
 		return bh;
     // 否则我们就调用底层快设备读写ll_rw_block函数，产生读设备块请求。

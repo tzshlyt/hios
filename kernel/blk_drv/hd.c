@@ -10,6 +10,8 @@
 #define MAJOR_NR 3
 #include "blk.h"
 
+void do_hd_request(void);
+
 // 读CMOS参数宏函数。
 // 这段宏读取CMOS中硬盘信息。与init/main.c中读取 CMOS 时钟信息的宏完全一样。
 #define CMOS_READ(addr) ({ \
@@ -148,7 +150,7 @@ static void bad_rw_inter(void) {
 
 // 读操作中断调用函数
 static void read_intr(void) {
-    s_printk("read_intr()\n");
+    // s_printk("read_intr()\n");
     // 错误检测
     if (win_result()) {
         bad_rw_inter();
@@ -205,7 +207,7 @@ static void hd_out(unsigned int drive, unsigned int nsect, unsigned int sect,
 // 若请求项此时是块设备的第1个(原来设备空闲)，则块设备当前请求项指针会直接指向该请求项(参见11_rw_b1k.c)，并会立刻调用本函数执行读写操作。
 // 否则在一个读写操作完成而引发的硬盘中断过程中，若还有请求项需要处理，则也会在硬盘中断过程中调用本函数。参考kernel/system call.s
 void do_hd_request(void) {
-    s_printk("do_hd_request()\n");
+    // s_printk("do_hd_request()\n");
     int i,r = 0;
 	unsigned int block,dev;
 	unsigned int sec,head,cyl;
@@ -216,12 +218,12 @@ void do_hd_request(void) {
     dev = MINOR(CURRENT->dev);          // 子设备号即对应硬盘上各分区
 	block = CURRENT->sector;            // 请求的起始扇区
 
-    if (dev >= 5*NR_HD || block + 2 > hd[dev].nr_sects) {   // 一次要求读写一块数据（2个扇区）
+    if (dev >= (unsigned int)(5*NR_HD) || block + 2 > (unsigned int)hd[dev].nr_sects) {   // 一次要求读写一块数据（2个扇区）
         end_request(0);
         goto repeat;
     }
 
-    block += hd[dev].start_sect;        // 获取磁盘的绝对扇区号
+    block += (unsigned int)hd[dev].start_sect;        // 获取磁盘的绝对扇区号
     dev /= 5;                           // 此时 dev 代表硬盘号(硬盘 0 还是硬盘 1)
     // 根据绝对扇区号 block 和硬盘号 dev，计数磁道中扇区号（sec）、所在柱面号（cyl）、和磁头号（head）
     // 初始时 eax = block, edx = 0,
@@ -237,15 +239,15 @@ void do_hd_request(void) {
 	nsect = CURRENT->nr_sectors;        // 欲读写的扇区数
 
     if (reset) {
-
+        // TODO:
     }
 
     if (recalibrate) {
-
+        // TODO:
     }
 
     if (CURRENT->cmd == WRITE) {
-
+        // TODO:
 	} else if (CURRENT->cmd == READ) {
 		hd_out(dev, nsect, sec, head, cyl, WIN_READ, &read_intr);
 	} else

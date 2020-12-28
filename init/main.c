@@ -12,8 +12,9 @@
 // Use to debug serial
 #include <serial_debug.h>
 
-static unsigned long buffer_memory_end = 0;  // 高速缓冲区末端地址
-static unsigned long main_memory_start = 0;              // 主内存（将用于分页）开始的位置
+static unsigned long memory_end = 0;                        // 机器具有的物理内存容量（字节数）
+static unsigned long buffer_memory_end = 0;                 // 高速缓冲区末端地址
+static unsigned long main_memory_start = 0;                 // 主内存（将用于分页）开始的位置
 
 extern void trap_init(void);
 extern void video_init(void);
@@ -90,7 +91,8 @@ int main() {
     printk("Welcome to Linux0.1 Kernel Mode(NO)\n");
 
     // 初始化物理页内存, 将 1MB - 16MB 地址空间的内存进行初始
-    mem_init(main_memory_start, 0x300000);
+    memory_end = 0x300000;
+    mem_init(main_memory_start, memory_end);
 
     // 中断实验
 	// asm ("int $3");
@@ -139,6 +141,10 @@ void init() {
     // 和安装根文件系统设备。该函数用25行上的宏定义，对应函数是sys_setup()，在块设备
     // 子目录kernel/blk_drv/hd.c中。
     setup((void *) &drive_info);
+
+    // 打印缓冲区块数和总字节数，每块1024字节，以及主内存区空闲内存字节数
+	printf("%d buffers = %d bytes buffer space\n", NR_BUFFERS, NR_BUFFERS*BLOCK_SIZE);
+	printf("Free mem: %d bytes\n", memory_end - main_memory_start);
 
     // // 为什么不在进程0和进程1中打印，因为schedule()跳过进程0
     // if(!fork()) {

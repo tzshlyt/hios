@@ -16,6 +16,7 @@
 
 #include <linux/mm.h>
 #include <linux/head.h>
+#include <linux/fs.h>
 #include <signal.h>
 
 // 定义任务状态
@@ -119,13 +120,13 @@ struct task_struct {
     unsigned short used_math;           // 标志：是否使用了协处理器
 
     int tty;                            // 进程使用 tty 的子设备号。-1 表示没有使用
-    // 下面是和文件系统相关的变量，暂时不使用，先注释
-    //unsigned short umask;               // 文件创建属性屏蔽位
-    //struct m_inode * pwd;               // 当前工作目录i节点结构
-    //struct m_inode * root;              // 根目录i节点结构
-    //struct m_inode * executable;        // 执行文件i节点结构
-    //unsigned long close_on_exec;        // 执行时关闭文件句柄位图标志。参见 include/fcntl.h
-    //struct file * filp[NR_OPEN];        // 进程使用的文件表结构
+    unsigned short umask;               // 文件创建属性屏蔽位
+    struct m_inode * pwd;               // 当前工作目录i节点结构
+    struct m_inode * root;              // 根目录i节点结构
+    struct m_inode * executable;        // 执行文件i节点结构
+    unsigned long close_on_exec;        // 执行时关闭文件句柄位图标志。参见 include/fcntl.h
+    struct file * filp[NR_OPEN];        // 进程使用的文件表结构
+
     struct desc_struct ldt[3];          // 本任务的局部表描述符。0 空，1 代码段cs，2 数据段和堆栈段 ds&ss
     struct tss_struct tss;               // 本进程的任务状态段信息结构
 };
@@ -141,7 +142,8 @@ struct task_struct {
 /* uid */    0, 0, 0, 0, 0, 0, \
 /* alarm, etc... */   0, 0, 0, 0, 0, 0, \
 /* math */    0, \
-/* tty */   -1, \
+/* fs info */	-1,0022,NULL,NULL,NULL,0, \
+/* filp */	{NULL,}, \
 /* LDT */    { \
         {0, 0},\
         {0x9f, 0xc0fa00},  /* 代码长640k, 基地址 0x0, G=1, D=1, DPL=3, P=1 TYPE=0x0a */ \

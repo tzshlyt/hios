@@ -107,6 +107,7 @@ int copy_process(int nr,long ebp,long edi,long esi,long gs,long none,
 {
 	struct task_struct *p;
 	int i;
+    struct file *f;
 
 	/* Only for emit the warning! */
     i = none;
@@ -185,17 +186,17 @@ int copy_process(int nr,long ebp,long edi,long esi,long gs,long none,
 	}
 	// 如果父进程中有文件是打开的，则将对应文件的打开次数增1。
 	// 因为这里创建的子进程会与父进程共享这些打开的文件。
-	// 将当前进程（父进程）的pwd， root 和executable引用次数均增1。
+	// 将当前进程（父进程）的pwd， root 和 executable引用次数均增1。
 	// 与上面同样的道理，子进程也引用了这些i节点。
-	// for (i=0; i<NR_OPEN;i++)
-	// 	if ((f=p->filp[i]))
-	// 		f->f_count++;
-	// if (current->pwd)
-	// 	current->pwd->i_count++;
-	// if (current->root)
-	// 	current->root->i_count++;
-	// if (current->executable)
-	// 	current->executable->i_count++;
+	for (i = 0; i<NR_OPEN; i++)
+		if ((f = p->filp[i]))
+			f->f_count++;
+	if (current->pwd)
+		current->pwd->i_count++;
+	if (current->root)
+		current->root->i_count++;
+	if (current->executable)
+		current->executable->i_count++;
 
 	// 把进程1的任务状态描述符表 和局部描述符表挂接在全局描述符表中，
 	// 标志着系统从此具备操作新进程的能力

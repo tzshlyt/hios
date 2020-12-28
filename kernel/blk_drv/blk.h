@@ -80,7 +80,7 @@ static inline void unlock_buffer(struct buffer_head * bh) {
 static inline void end_request(int uptodate) {
     DEVICE_OFF(CURRENT->dev);                   // 关闭设备
     if (CURRENT->bh) {
-        CURRENT->bh->b_uptodate = uptodate;     // 置更新标志
+        CURRENT->bh->b_uptodate = (unsigned char)uptodate;     // 置更新标志
         unlock_buffer(CURRENT->bh);             // 解锁缓冲区
     }
 	if (!uptodate) {

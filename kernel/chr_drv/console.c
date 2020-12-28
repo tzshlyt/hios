@@ -6,6 +6,7 @@
 #include <serial_debug.h>
 
 extern void keyboard_interrupt(void);
+static void memcpy(char *dest, char *src, int count, int size);
 
 #define PAGE_SIZE 4096
 #define VIDEO_MEM 0xB8000   // 屏幕映射内存地址, 固定地址
@@ -147,7 +148,7 @@ void roll_screen() {
     return;
 }
 
-void memcpy(char *dest, char *src, int count, int size) {
+static void memcpy(char *dest, char *src, int count, int size) {
     int i;
     int j;
     for(i = 0; i < count; i++) {

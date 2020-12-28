@@ -9,7 +9,6 @@ void video_init();
 int video_getx();
 int video_gety();
 void roll_screen();
-void memcpy(char *dest, char *src, int count, int size);
 void printnum(int num, int base, int sign);
 int get_cursor();
 void update_cursor(int row, int col);

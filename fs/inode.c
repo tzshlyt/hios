@@ -54,6 +54,35 @@ void sync_inodes() {
             write_inode(inode);
     }
 }
+//// 文件数据块映射到盘块的处理操作。
+// 该函数把指定的文件数据块block对应到设备上逻辑块上，并返回逻辑块号。
+static int _bmap(struct m_inode * inode, int block, int create) {
+    struct buffer_head * bh;
+    int i;
+
+    if (block < 0)
+		panic("_bmap: block<0");
+	if (block >= 7+512+512*512)
+		panic("_bmap: block>big");
+
+    if (block < 7) {
+        if (create && !inode->i_zone[block]) {
+            if ((inode->i_zone[block] = new_block(inode->i_dev))) {
+                inode->i_ctime = CURRENT_TIME;
+                inode->i_dirt = 1;
+            }
+        }
+        return inode->i_zone[block];
+    }
+
+}
+
+//// 取文件数据块block在设备上对应的逻辑块号。
+// 参数：inode - 文件的内存i节点指针；block - 文件中的数据块号。
+// 若操作成功则返回对应的逻辑块号，否则返回0.
+int bmap(struct m_inode * inode,int block) {
+	return _bmap(inode, block, 0);
+}
 
 //// 放回(放置)一个i节点（回写入设备）
 // 主要用于把i节点引用计数值递减 1, 并且若是管道i节点，则唤醒等待的进程。

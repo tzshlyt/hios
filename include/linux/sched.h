@@ -161,9 +161,9 @@ extern struct task_struct *task[NR_TASKS];          // 任务指针数组
 extern struct task_struct *last_task_used_math;     // 上一个使用过协处理器的进程
 extern struct task_struct *current;                 // 当前进程
 extern long volatile jiffies;                       // 开机开始算起的滴答数（10ms/滴答）
-extern long start_time;                             // 开机时间。从1970 开始计时的秒数
+extern long startup_time;                             // 开机时间。从1970 开始计时的秒数
 
-#define CURRENT_TIME (start_time + jiffies / HZ)     // 当前时间（秒数）
+#define CURRENT_TIME (startup_time + jiffies / HZ)     // 当前时间（秒数）
 
 extern void add_timer(long *jiffies, void(*fn)(void));          // 添加定时器，kernel/sched.c
 extern void sleep_on(struct task_struct **p);                   // 不可中断的等待睡眠，kernel/sched.c

@@ -32,6 +32,7 @@ static inline _syscall0(int, pause)
 static inline _syscall1(int, setup, void *, BIOS)
 static inline _syscall1(int, sys_debug, char *, str)
 static inline _syscall1(int, sleep, long, seconds)
+static inline _syscall3(int, read, int, fd, char *, buf, int, count)
 
 // 下面三行分别将指定的线性地址强行转换为给定数据类型的指针，并获取指针所指的内容。
 // 由于内核代码段被映射到从物理地址零开始的地方，因此这些线性地址
@@ -72,6 +73,7 @@ __asm__ ("movl %%esp,%%eax\n\t" /* 保存堆栈指针esp到eax寄存器中 */\
 int mmtest_main(void);
 void signal_demo_main(void);
 void sched_abcd_demo(void);
+void ls_demo(void);
 
 struct drive_info { char dummy[32]; } drive_info;       // 用于存放硬盘参数表信息
 
@@ -146,6 +148,7 @@ void init() {
 	printf("%d buffers = %d bytes buffer space\n", NR_BUFFERS, NR_BUFFERS*BLOCK_SIZE);
 	printf("Free mem: %d bytes\n", memory_end - main_memory_start);
 
+    ls_demo();
     // // 为什么不在进程0和进程1中打印，因为schedule()跳过进程0
     // if(!fork()) {
     //     while(1)
@@ -154,6 +157,11 @@ void init() {
     //     while(1)
     //         sys_debug("B");
     // }
+}
+
+void ls_demo() {
+    char _buf[2048];
+    read(3, _buf, 3);
 }
 
 void sched_abcd_demo() {

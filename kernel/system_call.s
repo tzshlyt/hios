@@ -40,7 +40,7 @@ EFLAGS = 0x24
 OLDESP = 0x28			 # 当特权级发生变化时栈会切换，用户栈指针被保存在内核态中。
 OLDSS = 0x2C
 
-nr_system_calls = 72 + 1 # sys_debug
+nr_system_calls = 72 + 3 # sys_debug
 
 # 以下是任务结构（task_struct）中变量偏移值，参见 sched.h
 state = 0				# 进程状态码

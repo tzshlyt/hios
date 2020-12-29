@@ -12,6 +12,7 @@
 #define __NR_setup      0
 #define __NR_exit       1
 #define __NR_fork       2
+#define __NR_read       3
 #define __NR_waitpid	7
 #define __NR_sleep      10
 #define __NR_alarm      27
@@ -20,11 +21,11 @@
 #define __NR_sigaction  67
 #define __NR_sgetmask   68
 #define __NR_ssetmask   69
-#define __NR_sys_debug  72
 
 // Just for debug
-#define __NR_user_tty_read 4
-#define __NR_user_tty_write 3
+#define __NR_sys_debug  72
+#define __NR_user_tty_read 73
+#define __NR_user_tty_write 74
 
 /* 例如
 static inline int fork(void) {
@@ -106,5 +107,6 @@ void _exit(int status);
 pid_t waitpid(pid_t pid, int * wait_stat, int options);
 pid_t wait(int * wait_stat);
 int alarm(long seconds);
+// int read(int fildes, char * buf, off_t count);
 
 #endif

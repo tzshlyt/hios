@@ -6,6 +6,7 @@
 extern int sys_setup();
 extern int sys_exit();
 extern int sys_fork();
+extern int sys_read();
 extern int sys_waitpid();
 extern int sys_pause();
 extern int stub_syscall();
@@ -26,8 +27,8 @@ fn_ptr sys_call_table[] = {
     sys_setup,
     sys_exit,
     sys_fork,     // 2
-    _user_tty_write,
-    tty_read,
+    sys_read,
+    stub_syscall,
     stub_syscall,
     stub_syscall,
     sys_waitpid,
@@ -95,7 +96,9 @@ fn_ptr sys_call_table[] = {
     sys_ssetmask,
     stub_syscall, // 70
     stub_syscall,
-    serial_debugstr
+    serial_debugstr,    // 调试
+    tty_read,
+    _user_tty_write
 };
 
 #endif

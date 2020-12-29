@@ -87,7 +87,7 @@ struct d_inode {
       \------/  \----/   \----/ \----/  \----/
      文件类型   执行文件设置的信息    文件访问权限
 
-    文件类型：                              执行是设置的信息
+    文件类型：                              执行文件设置的信息
         001: FIFO文件（八进制）                  01: 用户 ID
         002: 字符设备                           02: 组 ID
         004: 目录文件                           04: 对于目录，受限删除标志
@@ -189,6 +189,7 @@ extern void sync_inodes(void);
 extern void ll_rw_block(int rw, struct buffer_head * bh);
 extern void brelse(struct buffer_head * buf);
 extern struct buffer_head * bread(int dev,int block);
+extern int new_block(int dev);
 extern void free_block(int dev, int block);
 extern struct m_inode * new_inode(int dev);
 extern void free_inode(struct m_inode * inode);

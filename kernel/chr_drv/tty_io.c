@@ -20,7 +20,7 @@
 
 */
 
-#define DEBUG
+// #define DEBUG
 
 void con_init();
 extern void con_write(struct tty_struct *tty);
@@ -184,7 +184,9 @@ int _user_tty_write(unsigned channel, char *buf, int nr) {
         char c = get_fs_byte(buf + i);
         PUTCH(c, tty->write_q);
     }
+#ifdef DEBUG
     tty_queue_stat(&tty->write_q);
+#endif
     tty_write(tty);
     return nr;
 }

@@ -1,9 +1,9 @@
 
 #define __LIBRARY__
+#include <unistd.h>
 
 #include <linux/kernel.h>
 #include <linux/sched.h>
-#include <unistd.h>
 #include <asm/system.h>
 #include <asm/io.h>
 #include <linux/tty.h>
@@ -33,7 +33,6 @@ static inline _syscall0(int, pause)
 static inline _syscall1(int, setup, void *, BIOS)
 static inline _syscall1(int, sys_debug, char *, str)
 static inline _syscall1(int, sleep, long, seconds)
-static inline _syscall3(int, read, int, fd, char *, buf, int, count)
 
 // 下面三行分别将指定的线性地址强行转换为给定数据类型的指针，并获取指针所指的内容。
 // 由于内核代码段被映射到从物理地址零开始的地方，因此这些线性地址
@@ -165,7 +164,15 @@ void init() {
 void ls_demo() {
     int fd = open("/", O_RDONLY, 0);
     char _buf[2048];
-    read(fd, _buf, 3);
+    int size = 0;
+    if ((size = read(fd, _buf, 0)) > 0) {
+        struct dir_entry *de = (struct dir_entry *)_buf;
+        while(size) {
+            printf("%s\n", de->name);
+            de++;
+            size -= 16;
+        }
+    }
 }
 
 void sched_abcd_demo() {

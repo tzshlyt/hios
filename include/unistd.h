@@ -59,7 +59,7 @@ type name(void) \
             : "0" (__NR_##name)); \
     if (__res >= 0) \
         return (type) __res; \
-    /*errno = -__res;*/ \
+    errno = -__res; \
     return  -1;\
 }
 
@@ -72,7 +72,7 @@ type name(atype a) \
             : "0" (__NR_##name), "b" ((long) a)); \
     if (__res >= 0) \
         return (type) __res; \
-    /*errno = -__res;*/ \
+    errno = -__res; \
     return -1; \
 }
 
@@ -85,7 +85,7 @@ type name(atype a, btype b) \
             : "0" (__NR_##name), "b" ((long) a), "c" ((long) b)); \
     if (__res >= 0) \
         return (type) __res; \
-    /*errno = -__res;*/ \
+    errno = -__res; \
     return -1; \
 }
 
@@ -98,16 +98,19 @@ type name(atype a, btype b, ctype c) \
             : "0" (__NR_##name), "b" ((long) a), "c" ((long) b), "d" ((long) c)); \
     if (__res >= 0) \
         return (type) __res; \
-    /* errno = -__res;*/ \
+    errno = -__res; \
     return -1; \
 }
 
-#endif
+#endif  /* __LIBRARY__ */
+
+extern int errno;
 
 void _exit(int status);
 pid_t waitpid(pid_t pid, int * wait_stat, int options);
 pid_t wait(int * wait_stat);
 int alarm(long seconds);
-// int read(int fildes, char * buf, off_t count);
+int dup(int fildes);
+int read(int fildes, char * buf, off_t count);
 
 #endif

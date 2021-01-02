@@ -1,5 +1,4 @@
 
-#include <linux/fs.h>
 #include <linux/sched.h>
 #include <asm/system.h>
 #include <linux/kernel.h>
@@ -54,8 +53,11 @@ void sync_inodes() {
             write_inode(inode);
     }
 }
-//// 文件数据块映射到盘块的处理操作。
-// 该函数把指定的文件数据块block对应到设备上逻辑块上，并返回逻辑块号。
+//// 文件数据块映射到盘块的处理操作
+// 参数：inode - 文件的i节点指针
+//      block - 文件中的数据块号
+//      create - 创建块标志
+// 返回文件数据块 block 对应在设备上的逻辑块号(盘块号)
 static int _bmap(struct m_inode * inode, int block, int create) {
     struct buffer_head * bh;
     int i;
@@ -65,22 +67,81 @@ static int _bmap(struct m_inode * inode, int block, int create) {
 	if (block >= 7+512+512*512)
 		panic("_bmap: block>big");
 
+    // 该块小于7，使用直接块表示
     if (block < 7) {
         if (create && !inode->i_zone[block]) {
-            if ((inode->i_zone[block] = new_block(inode->i_dev))) {
-                inode->i_ctime = CURRENT_TIME;
+            if ((inode->i_zone[block] = (unsigned short)new_block(inode->i_dev))) {
+                inode->i_ctime = (unsigned long)CURRENT_TIME;
                 inode->i_dirt = 1;
             }
         }
         return inode->i_zone[block];
     }
+    // 如果该块号>=7,且小于7+512，则说明使用的是一次间接块
+    block -= 7;
+    if (block < 512) {
+       if (create && !inode->i_zone[7]) {
+            if ((inode->i_zone[7] = (unsigned short)new_block(inode->i_dev))) {
+                inode->i_ctime = (unsigned long)CURRENT_TIME;
+                inode->i_dirt = 1;
+            }
+        }
+        if (!inode->i_zone[7])
+            return 0;
+        if (!(bh = bread(inode->i_dev, inode->i_zone[7])))
+            return 0;
+        i = ((unsigned short *)(bh->b_data))[block];        // 每一项占2个字节
+        if (create && !i) {
+            if ((i = new_block(inode->i_dev))) {
+                ((unsigned short *) (bh->b_data))[block] = (unsigned short)i;
+                bh->b_dirt = 1;
+            }
+        }
+        brelse(bh);             // 释放该间接块占用的缓冲块
+        return i;
+    }
 
+    // 到此，则表明数据块属于二次间接块
+    // 并取该二次间接块的一级块上第 block/512 项中的逻辑块号i
+    block -= 512;
+    if (create && !inode->i_zone[8]) {
+        if ((inode->i_zone[8] = (unsigned short)new_block(inode->i_dev))) {
+            inode->i_ctime = (unsigned long)CURRENT_TIME;
+            inode->i_dirt = 1;
+        }
+    }
+    if (!inode->i_zone[8])
+        return 0;
+    if (!(bh = bread(inode->i_dev, inode->i_zone[8])))
+        return 0;
+    i = ((unsigned short *)(bh->b_data))[block>>9];         // 二级间接块的一级信息
+    if (create && !i) {
+        if ((i = new_block(inode->i_dev))) {
+            ((unsigned short *) (bh->b_data))[block>>9] = (unsigned short)i;
+            bh->b_dirt = 1;
+        }
+    }
+    brelse(bh);
+    if (!i)
+        return 0;
+    // 读取二次间接块的二级块
+    if (!(bh = bread(inode->i_dev, i)))
+		return 0;
+    i = ((unsigned short *)bh->b_data)[block&511];
+    if (create && !i) {
+        if ((i = new_block(inode->i_dev))) {
+            ((unsigned short *) (bh->b_data))[block&511] = (unsigned short)i;
+            bh->b_dirt = 1;
+        }
+    }
+    brelse(bh);         // 释放该二次间接块的二级块
+    return i;
 }
 
 //// 取文件数据块block在设备上对应的逻辑块号。
 // 参数：inode - 文件的内存i节点指针；block - 文件中的数据块号。
 // 若操作成功则返回对应的逻辑块号，否则返回0.
-int bmap(struct m_inode * inode,int block) {
+int bmap(struct m_inode * inode, int block) {
 	return _bmap(inode, block, 0);
 }
 

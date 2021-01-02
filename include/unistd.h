@@ -13,6 +13,7 @@
 #define __NR_exit       1
 #define __NR_fork       2
 #define __NR_read       3
+#define __NR_open	    5
 #define __NR_waitpid	7
 #define __NR_sleep      10
 #define __NR_alarm      27

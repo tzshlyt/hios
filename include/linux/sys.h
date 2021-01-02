@@ -7,6 +7,7 @@ extern int sys_setup();
 extern int sys_exit();
 extern int sys_fork();
 extern int sys_read();
+extern int sys_open();
 extern int sys_waitpid();
 extern int sys_pause();
 extern int stub_syscall();
@@ -29,7 +30,7 @@ fn_ptr sys_call_table[] = {
     sys_fork,     // 2
     sys_read,
     stub_syscall,
-    stub_syscall,
+    sys_open,
     stub_syscall,
     sys_waitpid,
     stub_syscall,

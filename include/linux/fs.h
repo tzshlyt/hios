@@ -7,14 +7,14 @@
 /* devices are as follows: (same as minix, so we can use the minix
  * file system. These are major numbers.)
  *
- * 0 - unused (nodev)
- * 1 - /dev/mem
- * 2 - /dev/fd
- * 3 - /dev/hd
- * 4 - /dev/ttyx
- * 5 - /dev/tty
- * 6 - /dev/lp
- * 7 - unnamed pipes
+ * 0 - unused (nodev)       // 没有用到
+ * 1 - /dev/mem             // 内存设备
+ * 2 - /dev/fd              // 软盘
+ * 3 - /dev/hd              // 硬盘
+ * 4 - /dev/ttyx            // tty 串行终端
+ * 5 - /dev/tty             // tty 终端
+ * 6 - /dev/lp              // 打印设备
+ * 7 - unnamed pipes        // 没有命名的管道
  */
 
 #define IS_SEEKABLE(x) ((x)>=1 && (x)<=3)	// 判断设备是否是可以寻找定位的
@@ -49,6 +49,7 @@ void buffer_init(unsigned long buffer_end);
 #endif
 
 #define INODES_PER_BLOCK ((BLOCK_SIZE)/(sizeof (struct d_inode)))
+#define DIR_ENTRIES_PER_BLOCK ((BLOCK_SIZE)/(sizeof (struct dir_entry)))
 
 // 缓冲块头数据结构
 struct buffer_head {
@@ -191,6 +192,10 @@ extern void brelse(struct buffer_head * buf);
 extern struct buffer_head * bread(int dev,int block);
 extern int new_block(int dev);
 extern void free_block(int dev, int block);
+extern int bmap(struct m_inode * inode,int block);
+extern int open_namei(const char * pathname, int flag, int mode, struct m_inode ** res_inode);
+extern void iput(struct m_inode * inode);
+extern struct m_inode * iget(int dev,int nr);
 extern struct m_inode * new_inode(int dev);
 extern void free_inode(struct m_inode * inode);
 extern int sync_dev(int dev);

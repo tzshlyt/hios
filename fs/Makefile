@@ -3,7 +3,7 @@ include ../Makefile.header
 LDFLAGS	+= -r
 CFLAGS += -I../include
 
-OBJS = buffer.o super.o inode.o file_table.o truncate.o bitmap.o read_write.o file_dev.o
+OBJS = buffer.o super.o inode.o file_table.o truncate.o bitmap.o read_write.o file_dev.o open.o namei.o
 
 .c.s:
 	$(CC) $(CFLAGS) \

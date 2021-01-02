@@ -9,6 +9,7 @@
 #include <linux/tty.h>
 #include <linux/lib.h>
 #include <linux/fs.h>
+#include <fcntl.h>
 // Use to debug serial
 #include <serial_debug.h>
 
@@ -144,6 +145,8 @@ void init() {
     // 子目录kernel/blk_drv/hd.c中。
     setup((void *) &drive_info);
 
+    (void) open("/dev/tty0", O_RDWR, 0);
+
     // 打印缓冲区块数和总字节数，每块1024字节，以及主内存区空闲内存字节数
 	printf("%d buffers = %d bytes buffer space\n", NR_BUFFERS, NR_BUFFERS*BLOCK_SIZE);
 	printf("Free mem: %d bytes\n", memory_end - main_memory_start);
@@ -160,8 +163,9 @@ void init() {
 }
 
 void ls_demo() {
+    int fd = open("/", O_RDONLY, 0);
     char _buf[2048];
-    read(3, _buf, 3);
+    read(fd, _buf, 3);
 }
 
 void sched_abcd_demo() {

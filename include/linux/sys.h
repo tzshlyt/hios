@@ -10,6 +10,7 @@ extern int sys_read();
 extern int sys_open();
 extern int sys_waitpid();
 extern int sys_pause();
+extern int sys_dup();
 extern int stub_syscall();
 extern int serial_debugstr(char *str);
 extern int sys_kill(int pid, int sig);
@@ -66,7 +67,7 @@ fn_ptr sys_call_table[] = {
     stub_syscall,
     stub_syscall,
     stub_syscall, // 40
-    stub_syscall,
+    sys_dup,
     stub_syscall,
     stub_syscall,
     stub_syscall,

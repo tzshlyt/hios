@@ -144,7 +144,10 @@ void init() {
     // 子目录kernel/blk_drv/hd.c中。
     setup((void *) &drive_info);
 
+    // 以读写访问方式打开设备"/dev/tty0"，它对应终端控制台，产生句柄0号--stdin标准输入句柄
     (void) open("/dev/tty0", O_RDWR, 0);
+    (void) dup(0);                          // 复制句柄，产生句柄1号——stdout标准输出设备
+    (void) dup(0);                          // 复制句柄，产生句柄2号——stderr标准出错输出设备
 
     // 打印缓冲区块数和总字节数，每块1024字节，以及主内存区空闲内存字节数
 	printf("%d buffers = %d bytes buffer space\n", NR_BUFFERS, NR_BUFFERS*BLOCK_SIZE);

@@ -19,6 +19,7 @@
 #define __NR_alarm      27
 #define __NR_pause      29
 #define __NR_kill       37
+#define __NR_dup        41
 #define __NR_sigaction  67
 #define __NR_sgetmask   68
 #define __NR_ssetmask   69

@@ -12,7 +12,6 @@
 int file_read(struct m_inode * inode, struct file *filp, char * buf, int count) {
     int left, chars, nr = 0;
     struct buffer_head * bh;
-    struct dir_entry * de;
 
     if ((left = count) <= 0)
         return 0;

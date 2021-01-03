@@ -91,3 +91,24 @@ int sys_open(const char *filename, int flag, int mode) {
     f->f_pos = 0;
     return fd;
 }
+
+int sys_close(unsigned int fd) {
+    s_printk("sys_close() fd=%d\n", fd);
+    struct file * filp;
+    if (fd >= NR_OPEN)
+		return -EINVAL;
+    // 复位进程的执行关闭文件句柄位图对应位
+    current->close_on_exec &= (unsigned long)(~(1<<fd));
+    if (!(filp = current->filp[fd]))
+		return -EINVAL;
+
+    current->filp[fd] = NULL;
+    if (filp->f_count == 0)
+		panic("Close: file count is 0");
+    // 如果它还不为0，则说明有其他进程正在使用该文件，于是返回0（成功）
+    if (--filp->f_count)
+		return (0);
+    // 如果引用计数等于0，说明该文件已经没有进程引用，该文件结构已变为空闲。则释放该文件i节点，返回0.
+    iput(filp->f_inode);
+    return (0);
+}

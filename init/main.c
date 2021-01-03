@@ -137,7 +137,7 @@ int main() {
 
 void init() {
     // pid = 1
-    // int pid, i;
+    int pid, i;
 
     // setup()是一个系统调用。用于读取硬盘参数包括分区表信息并加载虚拟盘(若存在的话)
     // 和安装根文件系统设备。该函数用25行上的宏定义，对应函数是sys_setup()，在块设备
@@ -154,6 +154,20 @@ void init() {
 	printf("Free mem: %d bytes\n", memory_end - main_memory_start);
 
     ls_demo();
+
+    // 下面fork()用于创建一个子进程(任务2)
+    if(!(pid = fork())) {
+        close(0);
+        if (open("/etc/rc", O_RDONLY, 0)) {
+            _exit(1);
+        }
+    }
+
+    if(pid > 0) {
+        while (pid != wait(&i));
+    }
+
+    printf("--- End ---\n");
     // // 为什么不在进程0和进程1中打印，因为schedule()跳过进程0
     // if(!fork()) {
     //     while(1)

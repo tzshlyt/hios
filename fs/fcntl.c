@@ -23,9 +23,9 @@ static int dupfd(unsigned int fd, unsigned int arg) {
 
     // 在执行时关闭标志位图close_on_exec中复位该句柄位。
     // 即在运行exec()类函数时，不会关闭用dup()创建的句柄。
-    current->close_on_exec &= ~(1<<arg);
+    current->close_on_exec &= (unsigned long)(~(1<<arg));
     (current->filp[arg] = current->filp[fd])->f_count++;
-    return arg;
+    return (int)arg;
 }
 
 //// 复制文件句柄系统调用
